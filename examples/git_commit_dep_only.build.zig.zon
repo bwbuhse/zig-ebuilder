@@ -1,0 +1,11 @@
+.{
+    .name = "river",
+    .version = "0.4.0-dev",
+    .paths = .{""},
+    .dependencies = .{
+        .wlroots = .{
+            .url = "git+https://codeberg.org/ifreund/zig-wlroots#e486223799648d27e8b91c5fe0ea4c088b74b707",
+            .hash = "1220aeb3317e16c38583839961c9d695fa60d23a3d506c8275fb0e8fa9849844f2f7",
+        },
+    },
+}
