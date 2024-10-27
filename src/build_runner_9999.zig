@@ -282,6 +282,10 @@ pub fn main() !void {
                 builder.enable_darling = true;
             } else if (mem.eql(u8, arg, "-fno-darling")) {
                 builder.enable_darling = false;
+            } else if (mem.eql(u8, arg, "-fallow-so-scripts")) {
+                graph.allow_so_scripts = true;
+            } else if (mem.eql(u8, arg, "-fno-allow-so-scripts")) {
+                graph.allow_so_scripts = false;
             } else if (mem.eql(u8, arg, "-freference-trace")) {
                 builder.reference_trace = 256;
             } else if (mem.startsWith(u8, arg, "-freference-trace=")) {
@@ -445,10 +449,7 @@ pub fn main() !void {
 
         if (!watch) return cleanExit();
 
-        switch (builtin.os.tag) {
-            .linux, .windows => {},
-            else => fatal("--watch not yet implemented for {s}", .{@tagName(builtin.os.tag)}),
-        }
+        if (!Watch.have_impl) fatal("--watch not yet implemented for {s}", .{@tagName(builtin.os.tag)});
 
         try w.update(gpa, run.step_stack.keys());
 
@@ -561,7 +562,7 @@ fn prepare(
     }
 
     // Just to make diff'ing easier.
-    // Synced with Zig build runner, version 0.14.0-dev.1913+7b8fc18c6 .
+    // Synced with Zig build runner, version 0.14.0-dev.2052+6a364b4a5 .
     if (true) return zig_ebuilder_section: {
         const Report = struct {
             system_libraries: []const SystemLibrary,
@@ -1479,6 +1480,8 @@ fn usage(b: *std.Build, out_stream: anytype) !void {
         \\Advanced Options:
         \\  -freference-trace[=num]      How many lines of reference trace should be shown per compile error
         \\  -fno-reference-trace         Disable reference trace
+        \\  -fallow-so-scripts           Allows .so files to be GNU ld scripts
+        \\  -fno-allow-so-scripts        (default) .so files must be ELF files
         \\  --build-file [file]          Override path to build.zig
         \\  --cache-dir [path]           Override path to local Zig cache directory
         \\  --global-cache-dir [path]    Override path to global Zig cache directory
