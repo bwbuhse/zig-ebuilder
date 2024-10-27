@@ -16,7 +16,7 @@ EAPI=8
 
 declare -r -A ZBS_DEPENDENCIES=(
 {{#zbs.dependencies.tarball}}
-	[{{{name}}}]='{{{url}}}'
+	[{{{name}}}]='{{url}}'
 {{/zbs.dependencies.tarball}}
 
 	# Git dependencies, if any. If there are any,

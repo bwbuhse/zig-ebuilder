@@ -1532,18 +1532,12 @@ fn generateDependenciesArray(
         const name_writer = name.writer(gpa);
         const url_writer = url.writer(gpa);
 
+        // Print everything 'raw' so that Mustache template
+        // can percent-encode it by itself.
         const ext: FileType = if (std.ascii.eqlIgnoreCase(uri.scheme, "git+https") or std.ascii.eqlIgnoreCase(uri.scheme, "git+http")) git: {
-            // Assuming it is a commit. If "zig fetch" was called by author:
-            // * with "--save" option: tags are rewritten as commits,
-            // * with "--save-exact" option: tags are not rewritten.
-            const part_after_hashbang = uri.fragment orelse @panic("TODO: what to do with exact-saved mutable data (like git+https://...#<tag>)? They should really point to immutable data (like what zig fetch --save would do here, using \"?ref=<tag>#commit\") but IDK how to message it to the authors...");
-            const commit = try part_after_hashbang.toRawMaybeAlloc(arena);
-            const host = try uri.host.?.toRawMaybeAlloc(arena);
-            const path = try uri.path.toRawMaybeAlloc(arena);
-
-            // Services for which mapping "commit to tarball"
+            // Services for which mapping "Git commit to archive"
             // is well known and relatively stable.
-            const Services = enum {
+            const GitService = enum {
                 /// Codeberg.
                 codeberg,
                 /// GitHub main instance (not Enterprise).
@@ -1553,10 +1547,7 @@ fn generateDependenciesArray(
                 /// SourceHut Git instance.
                 sourcehut,
 
-                /// Unknown.
-                unknown,
-
-                /// Base URL, without tralinig slash,
+                /// Base URL, without trailing slash,
                 /// stripped of "www." etc. prefix if possible,
                 /// and prefers "https" over "http" if possible.
                 fn toUrl(self: @This()) []const u8 {
@@ -1565,7 +1556,6 @@ fn generateDependenciesArray(
                         .github => "https://github.com",
                         .gitlab => "https://gitlab.com",
                         .sourcehut => "https://git.sr.ht",
-                        .unknown => "",
                     };
                 }
 
@@ -1583,25 +1573,36 @@ fn generateDependenciesArray(
                     .{ "git.sr.ht", .sourcehut },
                 });
             };
-            const service = Services.fromHost.get(host) orelse .unknown;
 
-            try url_writer.writeAll(service.toUrl());
-            // Assume `path` has leading slash.
+            // Assuming it is a commit. If "zig fetch" was called by author:
+            // * with "--save" option: tags are rewritten as commits,
+            // * with "--save-exact" option: tags are not rewritten.
+            const commit = uri.fragment orelse @panic("TODO: what to do with exact-saved mutable data (like git+https://...#<tag>)? They should really point to immutable data (like what zig fetch --save would do here, using \"?ref=<tag>#commit\") but IDK how to message it to the authors...");
+            const host = try uri.host.?.toRawMaybeAlloc(arena);
+            const service = GitService.fromHost.get(host) orelse {
+                packaging_needed.appendAssumeCapacity(.{
+                    .name = try GitCommitDep.toFileName(.{ .name = dep.name, .hash = hash }, gpa),
+                    .hash = try gpa.dupe(u8, hash),
+                });
+                continue;
+            };
+
+            var repository = try uri.path.toRawMaybeAlloc(arena);
+            std.debug.assert(std.mem.startsWith(u8, repository, "/"));
             switch (service) {
-                .codeberg, .github, .sourcehut => {
-                    try url_writer.print("{s}/archive/{s}.tar.gz", .{ path, commit });
+                .codeberg, .github, .sourcehut, .gitlab => if (std.mem.endsWith(u8, repository, ".git")) {
+                    repository = repository[0 .. repository.len - ".git".len];
+                },
+            }
+
+            switch (service) {
+                .codeberg, .github, .sourcehut => |s| {
+                    try url_writer.print("{s}{s}/archive/{raw}.tar.gz", .{ s.toUrl(), repository, commit });
                     break :git .@"tar.gz";
                 },
-                .gitlab => {
-                    try url_writer.print("{s}/-/archive/{s}.tar.gz", .{ path, commit });
+                .gitlab => |s| {
+                    try url_writer.print("{s}{s}/-/archive/{raw}.tar.gz", .{ s.toUrl(), repository, commit });
                     break :git .@"tar.gz";
-                },
-                .unknown => {
-                    packaging_needed.appendAssumeCapacity(.{
-                        .name = try GitCommitDep.toFileName(.{ .name = dep.name, .hash = hash }, gpa),
-                        .hash = try gpa.dupe(u8, hash),
-                    });
-                    continue;
                 },
             }
         }
