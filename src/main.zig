@@ -1601,6 +1601,7 @@ fn generateDependenciesArray(
                     break :git .@"tar.gz";
                 },
                 .gitlab => |s| {
+                    // TODO: Change to ".tar.bz2" when/if `zig fetch` start to support it.
                     try url_writer.print("{s}{s}/-/archive/{raw}.tar.gz", .{ s.toUrl(), repository, commit });
                     break :git .@"tar.gz";
                 },
@@ -1682,6 +1683,7 @@ fn receiveReport(arena: std.mem.Allocator, server: *std.net.Server, result: *Ful
 const FileType = enum {
     tar,
     @"tar.gz",
+    @"tar.bz2",
     @"tar.xz",
     @"tar.zst",
     git_pack,
@@ -1690,6 +1692,8 @@ const FileType = enum {
     fn fromPath(file_path: []const u8) ?@This() {
         const ascii = std.ascii;
         if (ascii.endsWithIgnoreCase(file_path, ".tar")) return .tar;
+        // TODO enable when/if `zig fetch` starts to support it.
+        // if (ascii.endsWithIgnoreCase(file_path, ".tar.bz2")) return .@"tar.bz2";
         if (ascii.endsWithIgnoreCase(file_path, ".tgz")) return .@"tar.gz";
         if (ascii.endsWithIgnoreCase(file_path, ".tar.gz")) return .@"tar.gz";
         if (ascii.endsWithIgnoreCase(file_path, ".txz")) return .@"tar.xz";
