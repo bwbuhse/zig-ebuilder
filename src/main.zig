@@ -1566,7 +1566,7 @@ fn generateDependenciesArray(
                     .{ "github.com", .github },
                     .{ "www.github.com", .github },
 
-                    .{ "github.com", .gitlab },
+                    .{ "gitlab.com", .gitlab },
                     .{ "www.gitlab.com", .gitlab },
 
                     // As of 2024 no "www." variant or redirect:
