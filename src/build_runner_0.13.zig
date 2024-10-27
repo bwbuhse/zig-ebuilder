@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2024 Zig contributors
+// SPDX-License-Identifier: MIT
 const std = @import("std");
 const builtin = @import("builtin");
 const assert = std.debug.assert;
