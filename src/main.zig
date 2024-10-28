@@ -601,7 +601,7 @@ pub fn main() !void {
     defer gpa.free(filtered_options);
 
     if (options_status.missing_options.count() != 0) {
-        main_log.err(@src(), "Package does not have following options ({d}), which are critical for zig-ebuild.eclass:", .{options_status.missing_options.count()});
+        main_log.err(@src(), "Package does not have following options ({d}/{d}), which are critical for zig-ebuild.eclass:", .{ options_status.missing_options.count(), options_status.missing_options.bits.capacity() });
         var missing_options = options_status.missing_options.iterator();
         while (missing_options.next()) |missing_option| main_log.err(@src(), " * {s}", .{@tagName(missing_option)});
         main_log.err(@src(), "Fix this using preferred patch way, and then re-run generator.", .{});
