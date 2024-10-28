@@ -628,8 +628,11 @@ pub fn main() !void {
         },
         .zbs = .{
             .slot = zig_slot.render(),
+            .has_dependencies = @max(dependencies.tarball.len, dependencies.git_commit.len) > 0,
+            .has_system_dependencies = @max(report.system_integrations.len, report.system_libraries.len) > 0,
+            .has_user_options = report.user_options.len > 0,
             .dependencies = dependencies,
-            .tarball_tarball = optional_tarball_tarball_path orelse "(none)",
+            .tarball_tarball = optional_tarball_tarball_path,
             .report = report,
         },
     };
