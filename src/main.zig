@@ -5,6 +5,7 @@
 const std = @import("std");
 const mustache = @import("mustache");
 
+const Location = @import("Location.zig");
 const Logger = @import("Logger.zig");
 const Timestamp = @import("Timestamp.zig");
 
@@ -355,7 +356,7 @@ pub fn main() !void {
 
     var cache_dir = try cwd.makeOpenPath(cache_path, .{});
     defer cache_dir.close();
-    var cache_loc: DirLocation = .{ .dir = cache_dir, .string = cache_path };
+    var cache_loc: Location.Dir = .{ .dir = cache_dir, .string = cache_path };
 
     var dependencies_loc = try cache_loc.makeOpenDir(gpa, "deps");
     defer dependencies_loc.deinit(gpa);
@@ -369,8 +370,8 @@ pub fn main() !void {
         defer build_zig_zon.close();
         file_searching_events.info(@src(), "Found \"build.zig.zon\" file nearby, proceeding to fetch dependencies.", .{});
 
-        const project_loc: DirLocation = .{ .dir = project_dir, .string = dir_path };
-        const project_build_zig_zon_location: FileLocation = .{ .file = build_zig_zon, .string = initial_file_path };
+        const project_loc: Location.Dir = .{ .dir = project_dir, .string = dir_path };
+        const project_build_zig_zon_location: Location.File = .{ .file = build_zig_zon, .string = initial_file_path };
 
         var arena_instance: std.heap.ArenaAllocator = .init(gpa);
         defer arena_instance.deinit();
@@ -953,59 +954,7 @@ const BuildZigZon = struct {
 
 const FetchMode = enum { skip, plain, hashed };
 
-const DirLocation = struct {
-    string: []const u8,
-    dir: std.fs.Dir,
-
-    fn openFile(self: DirLocation, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.File.OpenError)!FileLocation {
-        const string = try std.fs.path.join(allocator, &.{ self.string, path });
-        errdefer allocator.free(string);
-
-        const file = try self.dir.openFile(path, .{});
-        return .{ .string = string, .file = file };
-    }
-
-    fn openDir(self: DirLocation, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.Dir.OpenError)!DirLocation {
-        const string = try std.fs.path.join(allocator, &.{ self.string, path });
-        errdefer allocator.free(string);
-
-        const dir = try self.dir.openDir(path, .{});
-        return .{ .string = string, .dir = dir };
-    }
-
-    fn makeOpenDir(self: DirLocation, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.Dir.MakeError || std.fs.Dir.OpenError || std.fs.Dir.StatFileError)!DirLocation {
-        const string = try std.fs.path.join(allocator, &.{ self.string, path });
-        errdefer allocator.free(string);
-
-        const dir = try self.dir.makeOpenPath(path, .{});
-        return .{ .string = string, .dir = dir };
-    }
-
-    fn deinit(self: *DirLocation, allocator: std.mem.Allocator) void {
-        allocator.free(self.string);
-        self.dir.close();
-    }
-};
-
-const FileLocation = struct {
-    string: []const u8,
-    file: std.fs.File,
-
-    fn openFile(self: FileLocation, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.File.OpenError)!DirLocation {
-        const string = try std.fs.path.join(allocator, &.{ self.string, path });
-        errdefer allocator.free(string);
-
-        const dir = try self.dir.openDir(path, .{});
-        return .{ .string = string, .dir = dir };
-    }
-
-    fn deinit(self: FileLocation, allocator: std.mem.Allocator) void {
-        allocator.free(self.string);
-        self.file.close();
-    }
-};
-
-fn readBuildZigZon(allocator: std.mem.Allocator, loc: FileLocation, file_parsing_events: Logger) !BuildZigZon {
+fn readBuildZigZon(allocator: std.mem.Allocator, loc: Location.File, file_parsing_events: Logger) !BuildZigZon {
     const file_content = std.zig.readSourceFileToEndAlloc(allocator, loc.file, null) catch |err| {
         file_parsing_events.err(@src(), "Error when loading file: {s} caused by \"{s}\".", .{ @errorName(err), loc.string });
         return err;
@@ -1022,7 +971,7 @@ fn readBuildZigZon(allocator: std.mem.Allocator, loc: FileLocation, file_parsing
 fn createGitCommitDependenciesTarball(
     arena: std.mem.Allocator,
     git_commits: []const GitCommitDep,
-    packages_loc: DirLocation,
+    packages_loc: Location.Dir,
     writer: anytype,
 ) !void {
     var full_tar_content: std.ArrayListUnmanaged(u8) = .empty;
@@ -1118,9 +1067,9 @@ fn generateDependenciesArray(
     arena: std.mem.Allocator,
     //
     project_build_zig_zon_struct: BuildZigZon,
-    project_loc: DirLocation,
-    dependencies_loc: DirLocation,
-    packages_loc: DirLocation,
+    project_loc: Location.Dir,
+    dependencies_loc: Location.Dir,
+    packages_loc: Location.Dir,
     file_events: Logger,
     env_map: *const std.process.EnvMap,
 ) !Dependencies {
@@ -1128,7 +1077,7 @@ fn generateDependenciesArray(
     var vendor_urls_map: std.StringArrayHashMapUnmanaged(VendorUri) = .empty;
     defer vendor_urls_map.deinit(arena);
 
-    var fifo: std.fifo.LinearFifo(struct { DirLocation, BuildZigZon }, .Dynamic) = .init(arena);
+    var fifo: std.fifo.LinearFifo(struct { Location.Dir, BuildZigZon }, .Dynamic) = .init(arena);
     defer fifo.deinit();
     try fifo.writeItem(.{ project_loc, project_build_zig_zon_struct });
 
