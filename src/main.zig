@@ -5,45 +5,9 @@
 const std = @import("std");
 const mustache = @import("mustache");
 
+const Timestamp = @import("Timestamp.zig");
+
 const version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 1 };
-
-const Timestamp = struct {
-    year: std.time.epoch.Year,
-    month: u4,
-    day: u5,
-    hour: u5,
-    minute: u6,
-    second: u6,
-
-    fn record() Timestamp {
-        const seconds = @max(0, std.time.timestamp());
-        const epoch_seconds: std.time.epoch.EpochSeconds = .{ .secs = seconds };
-
-        // 1 year and 355th day f.e.
-        const year_day = epoch_seconds.getEpochDay().calculateYearDay();
-        const year = year_day.year;
-
-        // 10 month and 4th day f.e.
-        const month_day = year_day.calculateMonthDay();
-        const month = month_day.month.numeric();
-        const day = month_day.day_index + 1;
-
-        // 10 hour, 9 minute and 8 seconds f.e.
-        const day_seconds = epoch_seconds.getDaySeconds();
-        const hour = day_seconds.getHoursIntoDay();
-        const minute = day_seconds.getMinutesIntoHour();
-        const second = day_seconds.getSecondsIntoMinute();
-
-        return .{
-            .year = year,
-            .month = month,
-            .day = day,
-            .hour = hour,
-            .minute = minute,
-            .second = second,
-        };
-    }
-};
 
 fn printHelp(writer: std.io.AnyWriter) void {
     writer.print(
@@ -623,7 +587,7 @@ pub fn main() !void {
     const context = .{
         .generator_version = try std.fmt.allocPrint(gpa, "{}", .{version}),
         .year = year: {
-            const time: Timestamp = .record();
+            const time: Timestamp = .now();
             break :year time.year;
         },
         .zbs = .{
@@ -1068,13 +1032,13 @@ const ChildLogger = struct {
         const writer = bw.writer();
 
         if (global.log_format.time != .none) {
-            const time: Timestamp = .record();
+            const time: Timestamp = .now();
 
             config.setColor(writer, .bright_black) catch {};
             switch (global.log_format.time) {
                 .none => @panic("unreachable (report to upstream of zig-ebuilder)"),
-                .time => writer.print("{d:0>2}:{d:0>2}:{d:0>2}", .{ time.hour, time.minute, time.second }) catch {},
-                .day_time => writer.print("{d}-{d:0>2}-{d:0>2} {d:0>2}:{d:0>2}:{d:0>2}", .{ time.year, time.month, time.day, time.hour, time.minute, time.second }) catch {},
+                .time => writer.print("{time}", .{time}) catch {},
+                .day_time => writer.print("{[stamp]day} {[stamp]time}", .{ .stamp = time }) catch {},
             }
             config.setColor(writer, .reset) catch {};
             writer.writeByte(' ') catch {};
