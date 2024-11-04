@@ -4,7 +4,6 @@
 
 const std = @import("std");
 
-const Location = @import("../Location.zig");
 const Logger = @import("../Logger.zig");
 const ZigProcess = @import("../ZigProcess.zig");
 const ZigSlot = @import("../main.zig").ZigSlot;

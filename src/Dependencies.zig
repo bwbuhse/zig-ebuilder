@@ -5,10 +5,10 @@
 const std = @import("std");
 
 const BuildZigZon = @import("BuildZigZon.zig");
-const Location = @import("Location.zig");
 const Logger = @import("Logger.zig");
 const ZigProcess = @import("ZigProcess.zig");
 
+const location = @import("location.zig");
 const setup = @import("setup.zig");
 
 const Dependencies = @This();
@@ -46,7 +46,7 @@ pub const FetchMode = enum { skip, plain, hashed };
 pub fn createGitCommitDependenciesTarball(
     arena: std.mem.Allocator,
     git_commits: []const GitCommitDep,
-    packages_loc: Location.Dir,
+    packages_loc: location.Dir,
     writer: anytype,
 ) !void {
     var full_tar_content: std.ArrayListUnmanaged(u8) = .empty;
@@ -131,16 +131,16 @@ pub fn collect(
     var vendor_urls_map: std.StringArrayHashMapUnmanaged(VendorUri) = .empty;
     defer vendor_urls_map.deinit(arena);
 
-    var fifo: std.fifo.LinearFifo(struct { Location.Dir, BuildZigZon }, .Dynamic) = .init(arena);
+    var fifo: std.fifo.LinearFifo(struct { location.Dir, BuildZigZon }, .Dynamic) = .init(arena);
     defer fifo.deinit();
     try fifo.writeItem(.{ project_setup.root, project_build_zig_zon_struct });
 
-    var first_item = true;
+    var is_project_root = true;
     while (fifo.readItem()) |pair| {
-        var location, const build_zig_zon_struct = pair;
+        var cwd, const build_zig_zon_struct = pair;
         defer {
-            if (first_item == false) location.deinit(arena);
-            first_item = false;
+            if (is_project_root == false) cwd.deinit(arena);
+            is_project_root = false;
         }
 
         file_events.debug(@src(), "build_zig_zon_struct: {any}", .{std.json.fmt(build_zig_zon_struct, .{ .whitespace = .indent_2 })});
@@ -167,7 +167,7 @@ pub fn collect(
 
             const result_of_fetch = try zig_process.fetch(
                 arena,
-                location,
+                cwd,
                 .{
                     .storage_loc = generator_setup.dependencies_storage,
                     .resource = resource,

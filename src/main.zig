@@ -7,15 +7,19 @@ const mustache = @import("mustache");
 
 const BuildZigZon = @import("BuildZigZon.zig");
 const Dependencies = @import("Dependencies.zig");
-const Location = @import("Location.zig");
 const Logger = @import("Logger.zig");
 const Report = @import("reports/Report.zig");
 const Timestamp = @import("Timestamp.zig");
 const ZigProcess = @import("ZigProcess.zig");
 
+const location = @import("location.zig");
 const setup = @import("setup.zig");
 
 const version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 1 };
+
+/// Oldest Zig version supported by zig-ebuild.eclass
+/// TODO maybe packages of other distros too? Not only ebuilds
+const oldest_supported_zig_version: std.SemanticVersion = .{ .major = 0, .minor = 13, .patch = 0 };
 
 fn printHelp(writer: std.io.AnyWriter) void {
     writer.print(
@@ -175,7 +179,7 @@ pub fn main() !void {
     var file_searching_events = try file_events.child("searching");
     defer file_searching_events.deinit();
 
-    const cwd: Location.Dir = .cwd();
+    const cwd: location.Dir = .cwd();
 
     const template_text = if (optional_custom_template_path) |custom_template_path|
         cwd.dir.readFileAlloc(gpa, custom_template_path, 1 * 1024 * 1024) catch |err| {
@@ -288,10 +292,8 @@ pub fn main() !void {
     main_log.info(@src(), "Found Zig version {any}, processing...", .{zig_version});
     std.debug.assert(zig_version.major == 0);
 
-    // Minimal Zig version supported by zig-ebuild.eclass
-    const minimum_supported_zig_version: std.SemanticVersion = .{ .major = 0, .minor = 13, .patch = 0 };
-    if (zig_version.order(minimum_supported_zig_version) == .lt) {
-        main_log.err(@src(), "Zig version is not supported by \"zig-ebuild.eclass\": {any} is less than {any}", .{ minimum_supported_zig_version, zig_version });
+    if (zig_version.order(oldest_supported_zig_version) == .lt) {
+        main_log.err(@src(), "Zig version is not supported by \"zig-ebuild.eclass\": {any} is less than {any}", .{ oldest_supported_zig_version, zig_version });
         return;
     }
 

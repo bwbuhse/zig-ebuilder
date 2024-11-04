@@ -4,18 +4,19 @@
 
 const std = @import("std");
 
-const Location = @import("Location.zig");
 const Logger = @import("Logger.zig");
+
+const location = @import("location.zig");
 
 const setup = @This();
 
 pub const Generator = struct {
     /// Absolute.
-    cache: Location.Dir,
+    cache: location.Dir,
     /// Absolute.
-    dependencies_storage: Location.Dir,
+    dependencies_storage: location.Dir,
     /// Absolute.
-    packages: Location.Dir,
+    packages: location.Dir,
 
     pub fn deinit(self: *setup.Generator, allocator: std.mem.Allocator) void {
         self.packages.deinit(allocator);
@@ -24,7 +25,7 @@ pub const Generator = struct {
     }
 
     pub fn makeOpen(
-        cwd: Location.Dir,
+        cwd: location.Dir,
         env_map: std.process.EnvMap,
         allocator: std.mem.Allocator,
         events: Logger,
@@ -100,12 +101,12 @@ pub const Generator = struct {
 
 pub const Project = struct {
     /// Relative to `cwd`.
-    root: Location.Dir,
+    root: location.Dir,
 
     /// Relative to `root`.
-    build_zig: Location.File,
+    build_zig: location.File,
     /// Relative to `root`.
-    build_zig_zon: ?Location.File,
+    build_zig_zon: ?location.File,
 
     pub fn deinit(self: *setup.Project, allocator: std.mem.Allocator) void {
         if (self.build_zig_zon) |build_zig_zon| build_zig_zon.deinit(allocator);
@@ -114,7 +115,7 @@ pub const Project = struct {
     }
 
     pub fn open(
-        cwd: Location.Dir,
+        cwd: location.Dir,
         initial_build_zig_path: []const u8,
         allocator: std.mem.Allocator,
         events: Logger,
@@ -135,7 +136,7 @@ pub const Project = struct {
         const build_zig_path_relative_to_root = try allocator.dupe(u8, paths.build_zig);
         errdefer allocator.free(build_zig_path_relative_to_root);
 
-        const build_zig: Location.File = .{
+        const build_zig: location.File = .{
             .string = build_zig_path_relative_to_root,
             .file = root.dir.openFile(build_zig_path_relative_to_root, .{}) catch |err| {
                 events.err(@src(), "Error when opening file \"{s}\": {s}. Aborting.", .{ build_zig_path_relative_to_root, @errorName(err) });
@@ -147,7 +148,7 @@ pub const Project = struct {
         const build_zig_zon_path_relative_to_root = try allocator.dupe(u8, paths.build_zig_zon);
         errdefer allocator.free(build_zig_zon_path_relative_to_root);
 
-        const build_zig_zon: Location.File = .{
+        const build_zig_zon: location.File = .{
             .string = build_zig_zon_path_relative_to_root,
             .file = root.dir.openFile(build_zig_zon_path_relative_to_root, .{}) catch |err| {
                 events.err(@src(), "Error when opening file \"{s}\": {s}. Ignoring.", .{ build_zig_zon_path_relative_to_root, @errorName(err) });

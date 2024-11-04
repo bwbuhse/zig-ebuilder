@@ -4,8 +4,9 @@
 
 const std = @import("std");
 
-const Location = @import("Location.zig");
 const Logger = @import("Logger.zig");
+
+const location = @import("location.zig");
 
 const BuildZigZon = @This();
 
@@ -64,7 +65,7 @@ pub fn deinit(self: *BuildZigZon, allocator: std.mem.Allocator) void {
     allocator.free(self.paths);
 }
 
-pub fn read(allocator: std.mem.Allocator, loc: Location.File, file_parsing_events: Logger) !BuildZigZon {
+pub fn read(allocator: std.mem.Allocator, loc: location.File, file_parsing_events: Logger) !BuildZigZon {
     const file_content = std.zig.readSourceFileToEndAlloc(allocator, loc.file, null) catch |err| {
         file_parsing_events.err(@src(), "Error when loading file: {s} caused by \"{s}\".", .{ @errorName(err), loc.string });
         return err;

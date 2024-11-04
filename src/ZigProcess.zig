@@ -6,9 +6,9 @@ const std = @import("std");
 
 const BuildZigZon = @import("BuildZigZon.zig");
 const Dependencies = @import("Dependencies.zig");
-const Location = @import("Location.zig");
 const Logger = @import("Logger.zig");
 
+const location = @import("location.zig");
 const setup = @import("setup.zig");
 
 const ZigProcess = @This();
@@ -20,7 +20,7 @@ env_map: *const std.process.EnvMap,
 pub fn version(
     self: ZigProcess,
     allocator: std.mem.Allocator,
-    cwd: Location.Dir,
+    cwd: location.Dir,
 ) std.process.Child.RunError!std.process.Child.RunResult {
     return try std.process.Child.run(.{
         .allocator = allocator,
@@ -37,9 +37,9 @@ pub fn version(
 pub fn fetch(
     self: ZigProcess,
     allocator: std.mem.Allocator,
-    cwd: Location.Dir,
+    cwd: location.Dir,
     args: struct {
-        storage_loc: Location.Dir,
+        storage_loc: location.Dir,
         resource: BuildZigZon.Dep,
         fetch_mode: Dependencies.FetchMode,
     },
@@ -82,7 +82,7 @@ pub fn build(
     project_setup: setup.Project,
     args: struct {
         build_runner_path: []const u8,
-        packages_loc: Location.Dir,
+        packages_loc: location.Dir,
         additional: [][:0]const u8,
     },
     events: Logger,

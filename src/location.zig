@@ -4,17 +4,17 @@
 
 const std = @import("std");
 
-const Location = @This();
+const location = @This();
 
 pub const Dir = struct {
     string: []const u8,
     dir: std.fs.Dir,
 
-    pub fn cwd() Location.Dir {
+    pub fn cwd() location.Dir {
         return .{ .dir = std.fs.cwd(), .string = "" };
     }
 
-    pub fn openFile(self: Location.Dir, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.File.OpenError)!Location.File {
+    pub fn openFile(self: location.Dir, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.File.OpenError)!location.File {
         const string = try std.fs.path.join(allocator, &.{ self.string, path });
         errdefer allocator.free(string);
 
@@ -22,7 +22,7 @@ pub const Dir = struct {
         return .{ .string = string, .file = file };
     }
 
-    pub fn openDir(self: Location.Dir, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.Dir.OpenError)!Location.Dir {
+    pub fn openDir(self: location.Dir, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.Dir.OpenError)!location.Dir {
         const string = try std.fs.path.join(allocator, &.{ self.string, path });
         errdefer allocator.free(string);
 
@@ -30,7 +30,7 @@ pub const Dir = struct {
         return .{ .string = string, .dir = dir };
     }
 
-    pub fn makeOpenDir(self: Location.Dir, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.Dir.MakeError || std.fs.Dir.OpenError || std.fs.Dir.StatFileError)!Location.Dir {
+    pub fn makeOpenDir(self: location.Dir, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.Dir.MakeError || std.fs.Dir.OpenError || std.fs.Dir.StatFileError)!location.Dir {
         const string = try std.fs.path.join(allocator, &.{ self.string, path });
         errdefer allocator.free(string);
 
@@ -38,7 +38,7 @@ pub const Dir = struct {
         return .{ .string = string, .dir = dir };
     }
 
-    pub fn deinit(self: *Location.Dir, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *location.Dir, allocator: std.mem.Allocator) void {
         allocator.free(self.string);
         self.dir.close();
     }
@@ -48,7 +48,7 @@ pub const File = struct {
     string: []const u8,
     file: std.fs.File,
 
-    pub fn openFile(self: Location.File, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.File.OpenError)!Location.Dir {
+    pub fn openFile(self: location.File, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.File.OpenError)!location.Dir {
         const string = try std.fs.path.join(allocator, &.{ self.string, path });
         errdefer allocator.free(string);
 
@@ -56,7 +56,7 @@ pub const File = struct {
         return .{ .string = string, .dir = dir };
     }
 
-    pub fn deinit(self: Location.File, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: location.File, allocator: std.mem.Allocator) void {
         allocator.free(self.string);
         self.file.close();
     }
