@@ -10,6 +10,10 @@ pub const Dir = struct {
     string: []const u8,
     dir: std.fs.Dir,
 
+    pub fn cwd() Location.Dir {
+        return .{ .dir = std.fs.cwd(), .string = "" };
+    }
+
     pub fn openFile(self: Location.Dir, allocator: std.mem.Allocator, path: []const u8) (error{OutOfMemory} || std.fs.File.OpenError)!Location.File {
         const string = try std.fs.path.join(allocator, &.{ self.string, path });
         errdefer allocator.free(string);

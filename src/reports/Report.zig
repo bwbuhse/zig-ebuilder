@@ -9,6 +9,8 @@ const Logger = @import("../Logger.zig");
 const ZigProcess = @import("../ZigProcess.zig");
 const ZigSlot = @import("../main.zig").ZigSlot;
 
+const setup = @import("../setup.zig");
+
 const Report = @This();
 
 system_libraries: []const SystemLibrary,
@@ -30,12 +32,10 @@ const UserOption = struct {
 pub fn collect(
     gpa: std.mem.Allocator,
     env_map: *std.process.EnvMap,
-    cache_loc: Location.Dir,
-    build_zig_path: []const u8,
-    packages_loc: Location.Dir,
+    generator_setup: setup.Generator,
     main_log: Logger,
     zig_build_additional_args: [][:0]const u8,
-    project_loc: Location.Dir,
+    project_setup: setup.Project,
     zig_slot: ZigSlot,
     zig_process: ZigProcess,
     /// Used to store result.
@@ -57,7 +57,7 @@ pub fn collect(
     };
     defer gpa.free(hashed_name);
 
-    var build_runners_loc = try cache_loc.makeOpenDir(gpa, "build_runners");
+    var build_runners_loc = try generator_setup.cache.makeOpenDir(gpa, "build_runners");
     defer build_runners_loc.deinit(gpa);
     try build_runners_loc.dir.writeFile(.{
         .sub_path = hashed_name,
@@ -91,12 +91,13 @@ pub fn collect(
 
     // Blocks thread
     const result_of_zig_build_runner = try zig_process.build(
-        project_loc,
         gpa,
-        build_zig_path,
-        build_runner_path,
-        packages_loc,
-        zig_build_additional_args,
+        project_setup,
+        .{
+            .build_runner_path = build_runner_path,
+            .packages_loc = generator_setup.packages,
+            .additional = zig_build_additional_args,
+        },
         main_log,
     );
     defer {

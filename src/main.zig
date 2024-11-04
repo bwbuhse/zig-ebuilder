@@ -13,6 +13,8 @@ const Report = @import("reports/Report.zig");
 const Timestamp = @import("Timestamp.zig");
 const ZigProcess = @import("ZigProcess.zig");
 
+const setup = @import("setup.zig");
+
 const version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 1 };
 
 fn printHelp(writer: std.io.AnyWriter) void {
@@ -173,10 +175,10 @@ pub fn main() !void {
     var file_searching_events = try file_events.child("searching");
     defer file_searching_events.deinit();
 
-    const cwd = std.fs.cwd();
+    const cwd: Location.Dir = .cwd();
 
     const template_text = if (optional_custom_template_path) |custom_template_path|
-        cwd.readFileAlloc(gpa, custom_template_path, 1 * 1024 * 1024) catch |err| {
+        cwd.dir.readFileAlloc(gpa, custom_template_path, 1 * 1024 * 1024) catch |err| {
             file_searching_events.err(@src(), "Error when searching custom template: {s} caused by \"{s}\".", .{ @errorName(err), custom_template_path });
 
             return error.InvalidTemplate;
@@ -201,7 +203,7 @@ pub fn main() !void {
     defer template.deinit(gpa);
 
     const initial_file_path: []const u8 = if (file_name) |path| blk: {
-        const stat = cwd.statFile(path) catch |err| {
+        const stat = cwd.dir.statFile(path) catch |err| {
             switch (err) {
                 error.FileNotFound => {
                     file_searching_events.err(@src(), "File or directory \"{s}\" not found.", .{path});
@@ -246,27 +248,14 @@ pub fn main() !void {
     };
     defer gpa.free(initial_file_path);
 
-    const dir_path = std.fs.path.dirname(initial_file_path) orelse ".";
-    const build_zig_path = std.fs.path.basename(initial_file_path);
-    const build_zig_zon_path = try std.mem.concat(gpa, u8, &.{ build_zig_path, ".zon" }); //&.{ initial_file_path, ".zon" });
-    defer gpa.free(build_zig_zon_path);
+    var project_setup: setup.Project = try .open(
+        cwd,
+        initial_file_path,
+        gpa,
+        file_searching_events,
+    );
+    defer project_setup.deinit(gpa);
 
-    main_log.debug(@src(), "initial_dir_path = {s}", .{dir_path});
-    main_log.debug(@src(), "build_zig_path = {s}", .{build_zig_path});
-    main_log.debug(@src(), "build_zig_zon_path = {s}", .{build_zig_zon_path});
-
-    var project_dir = cwd.openDir(dir_path, .{}) catch |err| {
-        file_searching_events.err(@src(), "Error when opening project \"{s}\": {s}.", .{ dir_path, @errorName(err) });
-        return err;
-    };
-    defer project_dir.close();
-    const project_loc: Location.Dir = .{ .dir = project_dir, .string = dir_path };
-
-    const build_zig = project_dir.openFile(build_zig_path, .{}) catch |err| {
-        file_searching_events.err(@src(), "Error when opening file \"{s}\": {s}.", .{ initial_file_path, @errorName(err) });
-        return err;
-    };
-    defer build_zig.close();
     file_searching_events.info(@src(), "Successfully found \"build.zig\" file!", .{});
 
     const zig_process: ZigProcess = .{
@@ -275,7 +264,7 @@ pub fn main() !void {
     };
 
     const zig_version_raw_string = zig_version_raw_string: {
-        const result_of_zig_version = try zig_process.version(project_loc, gpa);
+        const result_of_zig_version = try zig_process.version(gpa, project_setup.root);
         defer {
             gpa.free(result_of_zig_version.stderr);
             gpa.free(result_of_zig_version.stdout);
@@ -310,71 +299,29 @@ pub fn main() !void {
     defer zig_slot.deinit(gpa);
     main_log.info(@src(), "ZIG_SLOT is set to {s}", .{zig_slot.render()});
 
-    const cache_path = cache_path: {
-        if (env_map.get("XDG_CACHE_HOME")) |xdg_cache_home| xdg: {
-            // Pre spec, ${XDG_CACHE_HOME} must be set and non empty.
-            // And also be an absolute path.
-            if (xdg_cache_home.len == 0) {
-                main_log.err(@src(), "XDG_CACHE_HOME is set but content is empty, ignoring.", .{});
-                break :xdg;
-            } else if (!std.fs.path.isAbsolute(xdg_cache_home)) {
-                main_log.err(@src(), "XDG_CACHE_HOME is set but content is not an absolute path, ignoring.", .{});
-                break :xdg;
-            }
-
-            break :cache_path try std.fs.path.join(gpa, &.{ xdg_cache_home, "zig-ebuilder" });
-        }
-
-        const home = env_map.get("HOME") orelse {
-            main_log.err(@src(), "Neither XDG_CACHE_HOME nor HOME is set, aborting.", .{});
-            return;
-        };
-        if (home.len == 0) {
-            main_log.err(@src(), "XDG_CACHE_HOME is not set, HOME is set but content empty, aborting.", .{});
-            return;
-        } else if (!std.fs.path.isAbsolute(home)) {
-            main_log.err(@src(), "XDG_CACHE_HOME is not set, HOME is set but content is not an absolute path, aborting.", .{});
-            return;
-        }
-        break :cache_path try std.fs.path.join(gpa, &.{ home, ".cache", "zig-ebuilder" });
-    };
-    defer gpa.free(cache_path);
-    main_log.info(@src(), "Opening cache directory \"{s}\"...", .{cache_path});
-    std.debug.assert(std.fs.path.isAbsolute(cache_path));
-
-    var cache_dir = try cwd.makeOpenPath(cache_path, .{});
-    defer cache_dir.close();
-    var cache_loc: Location.Dir = .{ .dir = cache_dir, .string = cache_path };
-
-    var dependencies_loc = try cache_loc.makeOpenDir(gpa, "deps");
-    defer dependencies_loc.deinit(gpa);
-
-    var packages_loc = try dependencies_loc.makeOpenDir(gpa, "p");
-    defer packages_loc.deinit(gpa);
+    var generator_setup: setup.Generator = try .makeOpen(cwd, env_map, gpa, main_log);
+    defer generator_setup.deinit(gpa);
 
     const dependencies: Dependencies = if (global.fetch_mode != .skip) fetch: {
-        const build_zig_zon = project_dir.openFile(build_zig_zon_path, .{}) catch |err| {
-            file_searching_events.err(@src(), "Error when opening file \"{s}.zon\": {s}. Skipping fetching.", .{ initial_file_path, @errorName(err) });
+        const build_zig_zon_loc = if (project_setup.build_zig_zon) |build_zig_zon| build_zig_zon else {
+            file_searching_events.err(@src(), "\"build.zig.zon\" was not found. Skipping fetching.", .{});
             break :fetch .empty;
         };
-        defer build_zig_zon.close();
         file_searching_events.info(@src(), "Found \"build.zig.zon\" file nearby, proceeding to fetch dependencies.", .{});
-
-        const project_build_zig_zon_location: Location.File = .{ .file = build_zig_zon, .string = initial_file_path };
 
         var arena_instance: std.heap.ArenaAllocator = .init(gpa);
         defer arena_instance.deinit();
         const arena = arena_instance.allocator();
 
-        const project_build_zig_zon: BuildZigZon = try .read(arena, project_build_zig_zon_location, file_events);
+        var project_build_zig_zon_struct: BuildZigZon = try .read(arena, build_zig_zon_loc, file_events);
+        defer project_build_zig_zon_struct.deinit(arena);
         break :fetch try .collect(
             gpa,
             arena,
             //
-            project_build_zig_zon,
-            project_loc,
-            dependencies_loc,
-            packages_loc,
+            project_setup,
+            project_build_zig_zon_struct,
+            generator_setup,
             file_events,
             global.fetch_mode,
             zig_process,
@@ -384,14 +331,14 @@ pub fn main() !void {
 
     const optional_tarball_tarball_path: ?[]const u8 = if (dependencies.git_commit.len != 0) tarball_tarball: {
         file_events.warn(@src(), "Found dependencies that were not translated from Git commit to tarball format: {d} items. Packing them into one archive...", .{dependencies.git_commit.len});
-        var tarballs_loc = try cache_loc.makeOpenDir(gpa, "git_commit_tarballs");
+        var tarballs_loc = try generator_setup.cache.makeOpenDir(gpa, "git_commit_tarballs");
         defer tarballs_loc.deinit(gpa);
 
         var tar_mem: std.ArrayListUnmanaged(u8) = .empty;
         defer tar_mem.deinit(gpa);
 
         var hashed_writer = std.compress.hashedWriter(tar_mem.writer(gpa), std.hash.Crc32.init());
-        try Dependencies.createGitCommitDependenciesTarball(gpa, dependencies.git_commit, packages_loc, hashed_writer.writer());
+        try Dependencies.createGitCommitDependenciesTarball(gpa, dependencies.git_commit, generator_setup.packages, hashed_writer.writer());
 
         // Used for generated tarball-tarball name.
         const project_name = dependencies.root_package_name;
@@ -417,12 +364,10 @@ pub fn main() !void {
         gpa,
         //
         &env_map,
-        cache_loc,
-        build_zig_path,
-        packages_loc,
+        generator_setup,
         main_log,
         zig_build_additional_args,
-        project_loc,
+        project_setup,
         zig_slot,
         zig_process,
         arena,

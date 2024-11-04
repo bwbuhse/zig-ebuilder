@@ -9,6 +9,8 @@ const Location = @import("Location.zig");
 const Logger = @import("Logger.zig");
 const ZigProcess = @import("ZigProcess.zig");
 
+const setup = @import("setup.zig");
+
 const Dependencies = @This();
 
 /// Value of `name` field in `build.zig.zon` .
@@ -118,10 +120,9 @@ pub fn collect(
     /// All data allocated by this allocator should be cleaned by caller.
     arena: std.mem.Allocator,
     //
+    project_setup: setup.Project,
     project_build_zig_zon_struct: BuildZigZon,
-    project_loc: Location.Dir,
-    dependencies_loc: Location.Dir,
-    packages_loc: Location.Dir,
+    generator_setup: setup.Generator,
     file_events: Logger,
     fetch_mode: FetchMode,
     zig_process: ZigProcess,
@@ -132,7 +133,7 @@ pub fn collect(
 
     var fifo: std.fifo.LinearFifo(struct { Location.Dir, BuildZigZon }, .Dynamic) = .init(arena);
     defer fifo.deinit();
-    try fifo.writeItem(.{ project_loc, project_build_zig_zon_struct });
+    try fifo.writeItem(.{ project_setup.root, project_build_zig_zon_struct });
 
     var first_item = true;
     while (fifo.readItem()) |pair| {
@@ -156,7 +157,7 @@ pub fn collect(
         }) = try .initCapacity(arena, dependencies.map.count());
         defer all_paths.deinit(arena);
 
-        for (dependencies.map.keys(), dependencies.map.values(), 0..) |key, value, i| {
+        for (dependencies.map.keys(), dependencies.map.values(), 0..) |key, resource, i| {
             switch (fetch_mode) {
                 .skip => @panic("unreachable"),
                 .hashed, .plain => {},
@@ -165,11 +166,13 @@ pub fn collect(
             file_events.info(@src(), "Fetching \"{s}\" [{d}/{d}]...", .{ key, i + 1, dependencies.map.count() });
 
             const result_of_fetch = try zig_process.fetch(
-                location,
                 arena,
-                dependencies_loc.string,
-                value,
-                fetch_mode,
+                location,
+                .{
+                    .storage_loc = generator_setup.dependencies_storage,
+                    .resource = resource,
+                    .fetch_mode = fetch_mode,
+                },
                 file_events,
             );
             defer {
@@ -185,7 +188,7 @@ pub fn collect(
             all_paths.appendAssumeCapacity(.{
                 .hash = std.mem.trim(u8, result_of_fetch.stdout, &std.ascii.whitespace),
                 .name = key,
-                .storage = switch (value.storage) {
+                .storage = switch (resource.storage) {
                     .remote => |remote| .{ .remote = .{ .url = remote.url } },
                     .local => .local,
                 },
@@ -193,7 +196,7 @@ pub fn collect(
         }
 
         for (all_paths.items) |item| {
-            var package_loc = try packages_loc.openDir(arena, item.hash);
+            var package_loc = try generator_setup.packages.openDir(arena, item.hash);
             errdefer package_loc.deinit(arena);
 
             file_events.debug(@src(), "searching {s}...", .{package_loc.string});

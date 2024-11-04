@@ -9,6 +9,8 @@ const Dependencies = @import("Dependencies.zig");
 const Location = @import("Location.zig");
 const Logger = @import("Logger.zig");
 
+const setup = @import("setup.zig");
+
 const ZigProcess = @This();
 
 /// Zig executable to use.
@@ -17,8 +19,8 @@ env_map: *const std.process.EnvMap,
 
 pub fn version(
     self: ZigProcess,
-    cwd: Location.Dir,
     allocator: std.mem.Allocator,
+    cwd: Location.Dir,
 ) std.process.Child.RunError!std.process.Child.RunResult {
     return try std.process.Child.run(.{
         .allocator = allocator,
@@ -34,12 +36,14 @@ pub fn version(
 
 pub fn fetch(
     self: ZigProcess,
-    cwd: Location.Dir,
     allocator: std.mem.Allocator,
-    storage_dir: []const u8,
-    resource: BuildZigZon.Dep,
-    fetch_mode: Dependencies.FetchMode,
-    file_events: Logger,
+    cwd: Location.Dir,
+    args: struct {
+        storage_loc: Location.Dir,
+        resource: BuildZigZon.Dep,
+        fetch_mode: Dependencies.FetchMode,
+    },
+    events: Logger,
 ) std.process.Child.RunError!std.process.Child.RunResult {
     var argv: std.ArrayListUnmanaged([]const u8) = .empty;
     defer argv.deinit(allocator);
@@ -47,14 +51,14 @@ pub fn fetch(
         self.exe,
         "fetch",
         "--global-cache-dir",
-        storage_dir,
-        switch (resource.storage) {
+        args.storage_loc.string,
+        switch (args.resource.storage) {
             .remote => |remote| remote.url,
             .local => |local| local.path,
         },
     });
-    switch (fetch_mode) {
-        .hashed => switch (resource.storage) {
+    switch (args.fetch_mode) {
+        .hashed => switch (args.resource.storage) {
             .remote => |remote| try argv.append(allocator, remote.hash),
             .local => {},
         },
@@ -62,7 +66,7 @@ pub fn fetch(
         .skip => @panic("unreachable"),
     }
 
-    file_events.debug(@src(), "Running command: cd \"{!s}\" && {s}", .{ cwd.string, argv.items });
+    events.debug(@src(), "Running command: cd \"{!s}\" && {s}", .{ cwd.string, argv.items });
     return try std.process.Child.run(.{
         .allocator = allocator,
         .argv = argv.items,
@@ -74,13 +78,14 @@ pub fn fetch(
 
 pub fn build(
     self: ZigProcess,
-    cwd: Location.Dir,
     allocator: std.mem.Allocator,
-    build_zig_path: []const u8,
-    build_runner_path: []const u8,
-    packages_loc: Location.Dir,
-    additional_args: [][:0]const u8,
-    file_events: Logger,
+    project_setup: setup.Project,
+    args: struct {
+        build_runner_path: []const u8,
+        packages_loc: Location.Dir,
+        additional: [][:0]const u8,
+    },
+    events: Logger,
 ) std.process.Child.RunError!std.process.Child.RunResult {
     var argv: std.ArrayListUnmanaged([]const u8) = .empty;
     defer argv.deinit(allocator);
@@ -88,22 +93,22 @@ pub fn build(
         self.exe,
         "build",
         "--build-file",
-        build_zig_path,
+        project_setup.build_zig.string,
         "--build-runner",
-        build_runner_path,
+        args.build_runner_path,
         "--system",
-        packages_loc.string,
+        args.packages_loc.string,
         // TODO is it truly needed? sorting JSON values works for now
         // "--seed",
         // "1",
     });
-    try argv.appendSlice(allocator, additional_args);
+    try argv.appendSlice(allocator, args.additional);
 
-    file_events.debug(@src(), "Running command: cd \"{!s}\" && {s}", .{ cwd.string, argv.items });
+    events.debug(@src(), "Running command: cd \"{!s}\" && {s}", .{ project_setup.root.string, argv.items });
     return try std.process.Child.run(.{
         .allocator = allocator,
         .argv = argv.items,
-        .cwd_dir = cwd.dir,
+        .cwd_dir = project_setup.root.dir,
         .env_map = self.env_map,
         .max_output_bytes = 1 * 1024 * 1024,
     });
