@@ -4,9 +4,9 @@
 
 const std = @import("std");
 
-const Location = @import("Location.zig");
-const Logger = @import("Logger.zig");
-const ZigSlot = @import("main.zig").ZigSlot;
+const Location = @import("../Location.zig");
+const Logger = @import("../Logger.zig");
+const ZigSlot = @import("../main.zig").ZigSlot;
 
 const Report = @This();
 

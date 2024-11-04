@@ -8,7 +8,7 @@ const mustache = @import("mustache");
 const BuildZigZon = @import("BuildZigZon.zig");
 const Location = @import("Location.zig");
 const Logger = @import("Logger.zig");
-const Report = @import("Report.zig");
+const Report = @import("reports/Report.zig");
 const Timestamp = @import("Timestamp.zig");
 
 const version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 1 };
