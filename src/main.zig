@@ -5,6 +5,7 @@
 const std = @import("std");
 const mustache = @import("mustache");
 
+const Logger = @import("Logger.zig");
 const Timestamp = @import("Timestamp.zig");
 
 const version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 1 };
@@ -49,12 +50,10 @@ fn printHelp(writer: std.io.AnyWriter) void {
 
 var global: struct {
     prog_name: [:0]const u8,
-    log_format: LogFormat,
     zig_executable: [:0]const u8,
     fetch_mode: FetchMode,
 } = .{
     .prog_name = "(name not provided)",
-    .log_format = .{},
     .zig_executable = "zig",
     .fetch_mode = .plain,
 };
@@ -105,25 +104,25 @@ pub fn main() !void {
             };
         } else if (std.mem.startsWith(u8, arg, "--color=")) {
             const text = arg["--color=".len..];
-            global.log_format.color = std.meta.stringToEnum(std.meta.FieldType(LogFormat, .color), text) orelse {
+            Logger.global_format.color = std.meta.stringToEnum(@FieldType(Logger.Format, "color"), text) orelse {
                 stderr.print("Expected [on|off|auto] in \"{s}\", found \"{s}\"\n", .{ arg, text }) catch {};
                 return;
             };
         } else if (std.mem.startsWith(u8, arg, "--time=")) {
             const text = arg["--time=".len..];
-            global.log_format.time = std.meta.stringToEnum(std.meta.FieldType(LogFormat, .time), text) orelse {
+            Logger.global_format.time = std.meta.stringToEnum(@FieldType(Logger.Format, "time"), text) orelse {
                 stderr.print("Expected [none|time|day_time] in \"{s}\", found \"{s}\"\n", .{ arg, text }) catch {};
                 return;
             };
         } else if (std.mem.startsWith(u8, arg, "--src_loc=")) {
             const text = arg["--src_loc=".len..];
-            global.log_format.src_loc = std.meta.stringToEnum(std.meta.FieldType(LogFormat, .src_loc), text) orelse {
+            Logger.global_format.src_loc = std.meta.stringToEnum(@FieldType(Logger.Format, "src_loc"), text) orelse {
                 stderr.print("Expected [on|off] in \"{s}\", found \"{s}\"\n", .{ arg, text }) catch {};
                 return;
             };
         } else if (std.mem.startsWith(u8, arg, "--min_level=")) {
             const text = arg["--min_level=".len..];
-            global.log_format.min_level = std.meta.stringToEnum(std.meta.FieldType(LogFormat, .min_level), text) orelse {
+            Logger.global_format.min_level = std.meta.stringToEnum(@FieldType(Logger.Format, "min_level"), text) orelse {
                 stderr.print("Expected [err|warn|info|debug] in \"{s}\", found \"{s}\"\n", .{ arg, text }) catch {};
                 return;
             };
@@ -160,7 +159,7 @@ pub fn main() !void {
         }
     }
 
-    var main_log: ChildLogger = .{
+    var main_log: Logger = .{
         .shared = &.{ .scretch_pad = gpa },
         .scopes = &.{},
     };
@@ -628,7 +627,7 @@ const Parser = struct {
         self.ast.deinit(self.allocator);
     }
 
-    fn parse(self: *Parser, file_parsing_events: ChildLogger) error{ OutOfMemory, InvalidBuildZigZon }!BuildZigZon {
+    fn parse(self: *Parser, file_parsing_events: Logger) error{ OutOfMemory, InvalidBuildZigZon }!BuildZigZon {
         const allocator = self.allocator;
         const ast = &self.ast;
 
@@ -952,171 +951,6 @@ const BuildZigZon = struct {
     }
 };
 
-const Level = enum(u2) {
-    err = 0,
-    warn = 1,
-    info = 2,
-    debug = 3,
-
-    pub fn description(comptime self: Level) struct { std.io.tty.Color, []const u8 } {
-        return switch (self) {
-            // zig fmt: off
-            .err =>   .{ .red,    "ERROR__" },
-            .warn =>  .{ .yellow, "WARNING" },
-            .info =>  .{ .cyan,   "INFO___" },
-            .debug => .{ .green,  "DEBUG__" },
-            // zig fmt: on
-        };
-    }
-};
-
-const ChildLogger = struct {
-    shared: *const Shared,
-    scopes: [][]const u8,
-
-    const Shared = struct {
-        scretch_pad: std.mem.Allocator,
-    };
-
-    pub fn deinit(self: @This()) void {
-        self.shared.scretch_pad.free(self.scopes);
-    }
-
-    pub fn child(self: @This(), scope: []const u8) error{OutOfMemory}!ChildLogger {
-        const allocator = self.shared.scretch_pad; // alias
-        var array_list: std.ArrayListUnmanaged([]const u8) = try .initCapacity(allocator, self.scopes.len + 1);
-        errdefer array_list.deinit(allocator);
-
-        array_list.appendSliceAssumeCapacity(self.scopes);
-        array_list.appendAssumeCapacity(scope);
-
-        return .{
-            .shared = self.shared,
-            .scopes = try array_list.toOwnedSlice(allocator),
-        };
-    }
-
-    fn log(
-        self: @This(),
-        src: std.builtin.SourceLocation,
-        comptime message_level: Level,
-        comptime format: []const u8,
-        args: anytype,
-    ) void {
-        if (@intFromEnum(message_level) > @intFromEnum(global.log_format.min_level)) return;
-
-        const stderr = std.io.getStdErr();
-
-        std.debug.lockStdErr();
-        defer std.debug.unlockStdErr();
-
-        const config: std.io.tty.Config = switch (global.log_format.color) {
-            .on => config: {
-                if (@import("builtin").os.tag == .windows) windows: {
-                    if (stderr.isTty() == false) break :windows;
-
-                    var screen_info: std.os.windows.CONSOLE_SCREEN_BUFFER_INFO = undefined;
-                    if (std.os.windows.kernel32.GetConsoleScreenBufferInfo(stderr.handle, &screen_info) == std.os.windows.FALSE) break :windows;
-                    return .{ .windows_api = .{
-                        .handle = stderr.handle,
-                        .reset_attributes = screen_info.wAttributes,
-                    } };
-                }
-
-                break :config .escape_codes;
-            },
-            .off => .no_color,
-            .auto => std.io.tty.detectConfig(stderr),
-        };
-        var bw = std.io.bufferedWriter(stderr.writer());
-        const writer = bw.writer();
-
-        if (global.log_format.time != .none) {
-            const time: Timestamp = .now();
-
-            config.setColor(writer, .bright_black) catch {};
-            switch (global.log_format.time) {
-                .none => @panic("unreachable (report to upstream of zig-ebuilder)"),
-                .time => writer.print("{time}", .{time}) catch {},
-                .day_time => writer.print("{[stamp]day} {[stamp]time}", .{ .stamp = time }) catch {},
-            }
-            config.setColor(writer, .reset) catch {};
-            writer.writeByte(' ') catch {};
-        }
-
-        const color, const text = comptime message_level.description();
-        config.setColor(writer, color) catch {};
-        writer.writeAll(text) catch return;
-        config.setColor(writer, .reset) catch {};
-        writer.writeByte(' ') catch {};
-
-        switch (global.log_format.src_loc) {
-            .off => {},
-            .on => {
-                config.setColor(writer, .bright_black) catch {};
-                writer.print("{s}@{s}:{d}:", .{ src.module, src.file, src.line }) catch {};
-                config.setColor(writer, .reset) catch {};
-                writer.writeByte(' ') catch {};
-            },
-        }
-
-        if (self.scopes.len > 0) {
-            writer.writeByte('[') catch return;
-            for (self.scopes, 0..) |scope, i| {
-                writer.print("{s}{s}", .{ scope, if (i < self.scopes.len -| 1) " => " else "" }) catch {};
-            }
-            writer.writeAll("] ") catch return;
-        }
-
-        writer.print(format ++ "\n", args) catch return;
-        bw.flush() catch return;
-    }
-
-    pub fn err(
-        self: @This(),
-        src: std.builtin.SourceLocation,
-        comptime format: []const u8,
-        args: anytype,
-    ) void {
-        self.log(src, .err, format, args);
-    }
-
-    pub fn warn(
-        self: @This(),
-        src: std.builtin.SourceLocation,
-        comptime format: []const u8,
-        args: anytype,
-    ) void {
-        self.log(src, .warn, format, args);
-    }
-
-    pub fn info(
-        self: @This(),
-        src: std.builtin.SourceLocation,
-        comptime format: []const u8,
-        args: anytype,
-    ) void {
-        self.log(src, .info, format, args);
-    }
-
-    pub fn debug(
-        self: @This(),
-        src: std.builtin.SourceLocation,
-        comptime format: []const u8,
-        args: anytype,
-    ) void {
-        self.log(src, .debug, format, args);
-    }
-};
-
-// Make output more useful for screen readers, diff'ing and so on.
-const LogFormat = struct {
-    color: enum { on, off, auto } = .auto,
-    time: enum { none, time, day_time } = .time,
-    src_loc: enum { on, off } = .off,
-    min_level: Level = .info,
-};
-
 const FetchMode = enum { skip, plain, hashed };
 
 const DirLocation = struct {
@@ -1171,7 +1005,7 @@ const FileLocation = struct {
     }
 };
 
-fn readBuildZigZon(allocator: std.mem.Allocator, loc: FileLocation, file_parsing_events: ChildLogger) !BuildZigZon {
+fn readBuildZigZon(allocator: std.mem.Allocator, loc: FileLocation, file_parsing_events: Logger) !BuildZigZon {
     const file_content = std.zig.readSourceFileToEndAlloc(allocator, loc.file, null) catch |err| {
         file_parsing_events.err(@src(), "Error when loading file: {s} caused by \"{s}\".", .{ @errorName(err), loc.string });
         return err;
@@ -1287,7 +1121,7 @@ fn generateDependenciesArray(
     project_loc: DirLocation,
     dependencies_loc: DirLocation,
     packages_loc: DirLocation,
-    file_events: ChildLogger,
+    file_events: Logger,
     env_map: *const std.process.EnvMap,
 ) !Dependencies {
     // Keyed by `hash`
