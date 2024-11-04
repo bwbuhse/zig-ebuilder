@@ -21,7 +21,7 @@ minimum_zig_version_raw: ?[]const u8,
 dependencies: ?std.json.ArrayHashMap(Dep),
 paths: []const []const u8,
 
-const Dep = struct {
+pub const Dep = struct {
     storage: Storage,
     lazy: ?bool,
 

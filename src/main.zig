@@ -11,6 +11,7 @@ const Location = @import("Location.zig");
 const Logger = @import("Logger.zig");
 const Report = @import("reports/Report.zig");
 const Timestamp = @import("Timestamp.zig");
+const ZigProcess = @import("ZigProcess.zig");
 
 const version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 1 };
 
@@ -259,6 +260,8 @@ pub fn main() !void {
         return err;
     };
     defer project_dir.close();
+    const project_loc: Location.Dir = .{ .dir = project_dir, .string = dir_path };
+
     const build_zig = project_dir.openFile(build_zig_path, .{}) catch |err| {
         file_searching_events.err(@src(), "Error when opening file \"{s}\": {s}.", .{ initial_file_path, @errorName(err) });
         return err;
@@ -266,17 +269,13 @@ pub fn main() !void {
     defer build_zig.close();
     file_searching_events.info(@src(), "Successfully found \"build.zig\" file!", .{});
 
+    const zig_process: ZigProcess = .{
+        .exe = global.zig_executable,
+        .env_map = &env_map,
+    };
+
     const zig_version_raw_string = zig_version_raw_string: {
-        const result_of_zig_version = try std.process.Child.run(.{
-            .allocator = gpa,
-            .argv = &.{
-                global.zig_executable,
-                "version",
-            },
-            .cwd_dir = project_dir,
-            .env_map = &env_map,
-            .max_output_bytes = 1024,
-        });
+        const result_of_zig_version = try zig_process.version(project_loc, gpa);
         defer {
             gpa.free(result_of_zig_version.stderr);
             gpa.free(result_of_zig_version.stdout);
@@ -361,7 +360,6 @@ pub fn main() !void {
         defer build_zig_zon.close();
         file_searching_events.info(@src(), "Found \"build.zig.zon\" file nearby, proceeding to fetch dependencies.", .{});
 
-        const project_loc: Location.Dir = .{ .dir = project_dir, .string = dir_path };
         const project_build_zig_zon_location: Location.File = .{ .file = build_zig_zon, .string = initial_file_path };
 
         var arena_instance: std.heap.ArenaAllocator = .init(gpa);
@@ -378,9 +376,8 @@ pub fn main() !void {
             dependencies_loc,
             packages_loc,
             file_events,
-            &env_map,
             global.fetch_mode,
-            global.zig_executable,
+            zig_process,
         );
     } else .empty;
     defer dependencies.deinit(gpa);
@@ -415,6 +412,7 @@ pub fn main() !void {
     defer arena_instance.deinit();
     const arena = arena_instance.allocator();
 
+    main_log.info(@src(), "Running \"zig build\" with custom build runner. Arguments are in DEBUG.", .{});
     const report: Report = try .collect(
         gpa,
         //
@@ -424,9 +422,9 @@ pub fn main() !void {
         packages_loc,
         main_log,
         zig_build_additional_args,
-        project_dir,
-        global.zig_executable,
+        project_loc,
         zig_slot,
+        zig_process,
         arena,
     );
 

@@ -7,6 +7,7 @@ const std = @import("std");
 const BuildZigZon = @import("BuildZigZon.zig");
 const Location = @import("Location.zig");
 const Logger = @import("Logger.zig");
+const ZigProcess = @import("ZigProcess.zig");
 
 const Dependencies = @This();
 
@@ -122,9 +123,8 @@ pub fn collect(
     dependencies_loc: Location.Dir,
     packages_loc: Location.Dir,
     file_events: Logger,
-    env_map: *const std.process.EnvMap,
     fetch_mode: FetchMode,
-    zig_executable: []const u8,
+    zig_process: ZigProcess,
 ) !Dependencies {
     // Keyed by `hash`
     var vendor_urls_map: std.StringArrayHashMapUnmanaged(VendorUri) = .empty;
@@ -164,39 +164,17 @@ pub fn collect(
 
             file_events.info(@src(), "Fetching \"{s}\" [{d}/{d}]...", .{ key, i + 1, dependencies.map.count() });
 
-            const dir_to_fetch = switch (value.storage) {
-                .remote => |remote| remote.url,
-                .local => |local| local.path,
-            };
-
-            var argv: std.ArrayListUnmanaged([]const u8) = .empty;
-            defer argv.deinit(arena);
-            try argv.appendSlice(arena, &.{
-                zig_executable,
-                "fetch",
-                "--global-cache-dir",
+            const result_of_fetch = try zig_process.fetch(
+                location,
+                arena,
                 dependencies_loc.string,
-                dir_to_fetch,
-            });
-            switch (fetch_mode) {
-                .hashed => switch (value.storage) {
-                    .remote => |remote| try argv.append(arena, remote.hash),
-                    .local => {},
-                },
-                .plain => {},
-                .skip => @panic("unreachable"),
+                value,
+                fetch_mode,
+                file_events,
+            );
+            defer {
+                arena.free(result_of_fetch.stderr);
             }
-
-            file_events.debug(@src(), "Running command: cd \"{!s}\" && {s}", .{ location.string, argv.items });
-
-            const result_of_fetch = try std.process.Child.run(.{
-                .allocator = arena,
-                .argv = argv.items,
-                .cwd_dir = location.dir,
-                .env_map = env_map,
-                .max_output_bytes = 1 * 1024,
-            });
-            defer arena.free(result_of_fetch.stderr);
 
             if (result_of_fetch.stderr.len != 0) {
                 file_events.err(@src(), "Error when fetching dependency \"{s}\". Details are in DEBUG.", .{key});

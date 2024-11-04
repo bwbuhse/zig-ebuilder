@@ -6,6 +6,7 @@ const std = @import("std");
 
 const Location = @import("../Location.zig");
 const Logger = @import("../Logger.zig");
+const ZigProcess = @import("../ZigProcess.zig");
 const ZigSlot = @import("../main.zig").ZigSlot;
 
 const Report = @This();
@@ -34,9 +35,9 @@ pub fn collect(
     packages_loc: Location.Dir,
     main_log: Logger,
     zig_build_additional_args: [][:0]const u8,
-    project_dir: std.fs.Dir,
-    zig_executable: []const u8,
+    project_loc: Location.Dir,
     zig_slot: ZigSlot,
+    zig_process: ZigProcess,
     /// Used to store result.
     arena: std.mem.Allocator,
 ) !Report {
@@ -77,31 +78,6 @@ pub fn collect(
         try std.fmt.allocPrint(gpa, "{d}", .{report_server.listen_address.getPort()}),
     );
 
-    const runner_args = runner_args: {
-        var zig_build_args: std.ArrayListUnmanaged([]const u8) = .empty;
-        errdefer zig_build_args.deinit(gpa);
-
-        try zig_build_args.appendSlice(gpa, &.{
-            zig_executable,
-            "build",
-            "--build-file",
-            build_zig_path,
-            "--build-runner",
-            build_runner_path,
-            "--system",
-            packages_loc.string,
-            // TODO is it truly needed? sorting JSON values works for now
-            // "--seed",
-            // "1",
-        });
-        try zig_build_args.appendSlice(gpa, zig_build_additional_args);
-        break :runner_args try zig_build_args.toOwnedSlice(gpa);
-    };
-    defer gpa.free(runner_args);
-
-    main_log.info(@src(), "Running \"zig build\" with custom build runner. Arguments are in DEBUG.", .{});
-    main_log.debug(@src(), "Running command: {s}", .{runner_args});
-
     var report: Report = .{
         .system_libraries = undefined,
         .system_integrations = undefined,
@@ -114,13 +90,15 @@ pub fn collect(
     thread.detach();
 
     // Blocks thread
-    const result_of_zig_build_runner = try std.process.Child.run(.{
-        .allocator = gpa,
-        .argv = runner_args,
-        .cwd_dir = project_dir,
-        .env_map = env_map,
-        .max_output_bytes = 1 * 1024 * 1024,
-    });
+    const result_of_zig_build_runner = try zig_process.build(
+        project_loc,
+        gpa,
+        build_zig_path,
+        build_runner_path,
+        packages_loc,
+        zig_build_additional_args,
+        main_log,
+    );
     defer {
         gpa.free(result_of_zig_build_runner.stderr);
         gpa.free(result_of_zig_build_runner.stdout);
