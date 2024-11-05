@@ -13,12 +13,23 @@ const setup = @This();
 pub const Generator = struct {
     /// Absolute.
     cache: location.Dir,
-    /// Absolute.
+    /// Absolute, sub-dir of `cache`.
     dependencies_storage: location.Dir,
-    /// Absolute.
+    /// Absolute, sub-dir of `dependencies_storage`.
     packages: location.Dir,
 
+    /// Absolute.
+    prefix: location.Dir,
+    /// Absolute, sub-dir of `prefix`.
+    share: location.Dir,
+    /// Absolute, sub-dir of `share`.
+    build_runners: location.Dir,
+
     pub fn deinit(self: *setup.Generator, allocator: std.mem.Allocator) void {
+        self.build_runners.deinit(allocator);
+        self.share.deinit(allocator);
+        self.prefix.deinit(allocator);
+
         self.packages.deinit(allocator);
         self.dependencies_storage.deinit(allocator);
         self.cache.deinit(allocator);
@@ -32,7 +43,13 @@ pub const Generator = struct {
     ) (error{ OutOfMemory, CacheNotFound } ||
         std.fs.Dir.MakeError ||
         std.fs.Dir.OpenError ||
-        std.fs.File.OpenError)!setup.Generator {
+        std.fs.File.OpenError ||
+        std.fs.SelfExePathError)!setup.Generator {
+        const self_exe_dir_path = try std.fs.selfExeDirPathAlloc(allocator);
+        defer allocator.free(self_exe_dir_path);
+        std.debug.assert(std.fs.path.isAbsolute(self_exe_dir_path));
+        events.debug(@src(), "self_exe_dir = {s}", .{self_exe_dir_path});
+
         const cache_path = cache_path: {
             if (env_map.get("XDG_CACHE_HOME")) |xdg_cache_home| xdg: {
                 // Pre spec, ${XDG_CACHE_HOME} must be set and non empty.
@@ -68,6 +85,10 @@ pub const Generator = struct {
             .cache = cache_path,
             .dependencies_storage = "deps",
             .packages = "p",
+
+            .prefix = std.fs.path.dirname(self_exe_dir_path) orelse ".",
+            .share = "share/zig-ebuilder",
+            .build_runners = "build_runners",
         };
         events.debug(@src(), "paths = {}", .{std.json.fmt(paths, .{ .whitespace = .indent_2 })});
 
@@ -91,10 +112,32 @@ pub const Generator = struct {
         };
         errdefer packages.deinit(allocator);
 
+        var prefix = cwd.openDir(allocator, paths.prefix) catch |err| {
+            events.err(@src(), "Error when opening install prefix \"{s}\": {s}. Aborting.", .{ paths.prefix, @errorName(err) });
+            return err;
+        };
+        errdefer prefix.deinit(allocator);
+
+        var share = prefix.openDir(allocator, paths.share) catch |err| {
+            events.err(@src(), "Error when opening install prefix \"{s}\" sub-dir \"{s}\": {s}. Aborting.", .{ paths.prefix, paths.share, @errorName(err) });
+            return err;
+        };
+        errdefer share.deinit(allocator);
+
+        var build_runners = share.openDir(allocator, paths.build_runners) catch |err| {
+            events.err(@src(), "Error when opening build runners directory \"{s}{c}{s}\": {s}. Aborting.", .{ paths.prefix, std.fs.path.sep, paths.build_runners, @errorName(err) });
+            return err;
+        };
+        errdefer build_runners.deinit(allocator);
+
         return .{
             .cache = cache,
             .dependencies_storage = dependencies_storage,
             .packages = packages,
+
+            .prefix = prefix,
+            .share = share,
+            .build_runners = build_runners,
         };
     }
 };

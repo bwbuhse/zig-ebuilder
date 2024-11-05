@@ -4,10 +4,10 @@
 
 const std = @import("std");
 
-const Logger = @import("../Logger.zig");
-const ZigProcess = @import("../ZigProcess.zig");
+const Logger = @import("Logger.zig");
+const ZigProcess = @import("ZigProcess.zig");
 
-const setup = @import("../setup.zig");
+const setup = @import("setup.zig");
 
 const Report = @This();
 
@@ -27,13 +27,13 @@ const UserOption = struct {
     values: ?[]const []const u8,
 };
 
-fn get_build_runner_name_suffix(zig_version: ZigProcess.Version) error{BuildRunnerNotFound}![]const u8 {
+fn get_build_runner_name(
+    allocator: std.mem.Allocator,
+    zig_version: ZigProcess.Version,
+) error{OutOfMemory}![]const u8 {
     return switch (zig_version.kind) {
-        .live => "live",
-        .release => if (zig_version.sem_ver.major == 0 and zig_version.sem_ver.minor == 13)
-            "0.13"
-        else
-            return error.BuildRunnerNotFound,
+        .live => try allocator.dupe(u8, "live.zig"),
+        .release => try std.fmt.allocPrint(allocator, "{}.zig", .{zig_version.sem_ver}),
     };
 }
 
@@ -48,35 +48,14 @@ pub fn collect(
     /// Used to store result.
     arena: std.mem.Allocator,
 ) !Report {
-    const build_runner_name_suffix = get_build_runner_name_suffix(zig_process.version) catch {
-        main_log.err(@src(), "No build runner found for Zig {}, please report to zig-ebuilder upstream.", .{zig_process.version.sem_ver});
-        main_log.err(@src(), "Available build runners: {s}.", .{[2][]const u8{ "live", "0.13" }});
+    const build_runner_name = try get_build_runner_name(gpa, zig_process.version);
+    defer gpa.free(build_runner_name);
+
+    const build_runner = generator_setup.build_runners.openFile(gpa, build_runner_name) catch |err| {
+        main_log.err(@src(), "Can't open build runner {s}: {s}. Aborting.", .{ build_runner_name, @errorName(err) });
         return error.BuildRunnerNotFound;
     };
-
-    const build_runner_text = if (std.mem.eql(u8, build_runner_name_suffix, "live"))
-        @embedFile("build_runner_live.zig")
-    else if (std.mem.eql(u8, build_runner_name_suffix, "0.13"))
-        @embedFile("build_runner_0.13.zig")
-    else
-        @panic("unreachable");
-
-    const hashed_name = hashed_name: {
-        const hash_suffix = std.Build.Cache.HashHelper.oneShot(build_runner_text);
-        break :hashed_name try std.fmt.allocPrint(gpa, "{s}_{s}.zig", .{ get_build_runner_name_suffix(zig_process.version) catch @panic("unreachable"), hash_suffix });
-    };
-    defer gpa.free(hashed_name);
-
-    var build_runners_loc = try generator_setup.cache.makeOpenDir(gpa, "build_runners");
-    defer build_runners_loc.deinit(gpa);
-    try build_runners_loc.dir.writeFile(.{
-        .sub_path = hashed_name,
-        .data = build_runner_text,
-        .flags = .{ .read = true, .truncate = true },
-    });
-
-    const build_runner_path = try std.fs.path.join(gpa, &.{ build_runners_loc.string, hashed_name });
-    defer gpa.free(build_runner_path);
+    defer build_runner.deinit(gpa);
 
     const report_address: std.net.Address = .initIp6(@as([15]u8, @splat(0)) ++ .{1}, 0, 0, 0);
     var report_server = try report_address.listen(.{});
@@ -104,7 +83,7 @@ pub fn collect(
         gpa,
         project_setup,
         .{
-            .build_runner_path = build_runner_path,
+            .build_runner_path = build_runner.string,
             .packages_loc = generator_setup.packages,
             .additional = zig_build_additional_args,
         },

@@ -14,12 +14,18 @@ pub fn build(b: *std.Build) void {
     const mod_mustache = dep_mustache.module("mustache");
 
     const exe = b.addExecutable(.{
-        .name = "zig-ebuild",
+        .name = "zig-ebuilder",
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
     exe.root_module.addImport("mustache", mod_mustache);
+
+    b.installDirectory(std.Build.Step.InstallDir.Options{
+        .install_dir = .{ .custom = "share" },
+        .install_subdir = "zig-ebuilder",
+        .source_dir = b.path("share/"),
+    });
 
     if (no_bin)
         b.getInstallStep().dependOn(&exe.step)

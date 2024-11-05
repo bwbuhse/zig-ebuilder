@@ -8,7 +8,7 @@ const mustache = @import("mustache");
 const BuildZigZon = @import("BuildZigZon.zig");
 const Dependencies = @import("Dependencies.zig");
 const Logger = @import("Logger.zig");
-const Report = @import("reports/Report.zig");
+const Report = @import("Report.zig");
 const Timestamp = @import("Timestamp.zig");
 const ZigProcess = @import("ZigProcess.zig");
 

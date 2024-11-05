@@ -49,7 +49,7 @@ pub fn init(
     env_map: *const std.process.EnvMap,
     events: Logger,
 ) (error{ VersionCheckFailed, VersionTooOld, Overflow, InvalidVersion } || std.process.Child.RunError)!ZigProcess {
-    const result_of_zig_version = try std.process.Child.run(.{
+    const result_of_zig_version = std.process.Child.run(.{
         .allocator = allocator,
         .argv = &.{
             exe_path,
@@ -58,7 +58,13 @@ pub fn init(
         .cwd_dir = cwd.dir,
         .env_map = env_map,
         .max_output_bytes = 1024,
-    });
+    }) catch |err| switch (err) {
+        error.FileNotFound => {
+            events.err(@src(), "Zig executable \"{s}\" not found. Aborting.", .{exe_path});
+            return err;
+        },
+        else => return err,
+    };
     defer {
         allocator.free(result_of_zig_version.stderr);
         allocator.free(result_of_zig_version.stdout);
@@ -73,7 +79,7 @@ pub fn init(
     const version_to_parse = try allocator.dupe(u8, trimmed_string);
     errdefer allocator.free(version_to_parse);
 
-    events.info(@src(), "Found Zig version {any}, processing...", .{version_to_parse});
+    events.info(@src(), "Found Zig version {s}, processing...", .{version_to_parse});
 
     return .{
         .exe = exe_path,
