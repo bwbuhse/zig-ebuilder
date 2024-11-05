@@ -17,10 +17,6 @@ const setup = @import("setup.zig");
 
 const version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 1 };
 
-/// Oldest Zig version supported by zig-ebuild.eclass
-/// TODO maybe packages of other distros too? Not only ebuilds
-const oldest_supported_zig_version: std.SemanticVersion = .{ .major = 0, .minor = 13, .patch = 0 };
-
 fn printHelp(writer: std.io.AnyWriter) void {
     writer.print(
         \\Usage: {[prog_name]s} [flags] <path>
@@ -262,44 +258,8 @@ pub fn main() !void {
 
     file_searching_events.info(@src(), "Successfully found \"build.zig\" file!", .{});
 
-    const zig_process: ZigProcess = .{
-        .exe = global.zig_executable,
-        .env_map = &env_map,
-    };
-
-    const zig_version_raw_string = zig_version_raw_string: {
-        const result_of_zig_version = try zig_process.version(gpa, project_setup.root);
-        defer {
-            gpa.free(result_of_zig_version.stderr);
-            gpa.free(result_of_zig_version.stdout);
-        }
-
-        if (result_of_zig_version.stderr.len != 0) {
-            main_log.err(@src(), "Error when checking Zig version: {s}", .{result_of_zig_version.stderr});
-            return;
-        }
-
-        const version_to_parse = std.mem.trim(u8, result_of_zig_version.stdout, &std.ascii.whitespace);
-        break :zig_version_raw_string try gpa.dupe(u8, version_to_parse);
-    };
-    defer gpa.free(zig_version_raw_string);
-    const zig_version = std.SemanticVersion.parse(zig_version_raw_string) catch |err| switch (err) {
-        error.InvalidVersion, error.Overflow => {
-            main_log.err(@src(), "Error when parsing Zig version: {s} caused by {s}.", .{ @errorName(err), zig_version_raw_string });
-            return;
-        },
-    };
-    main_log.info(@src(), "Found Zig version {any}, processing...", .{zig_version});
-    std.debug.assert(zig_version.major == 0);
-
-    if (zig_version.order(oldest_supported_zig_version) == .lt) {
-        main_log.err(@src(), "Zig version is not supported by \"zig-ebuild.eclass\": {any} is less than {any}", .{ oldest_supported_zig_version, zig_version });
-        return;
-    }
-
-    const zig_slot: ZigSlot = try .init(zig_version, gpa);
-    defer zig_slot.deinit(gpa);
-    main_log.info(@src(), "ZIG_SLOT is set to {s}", .{zig_slot.render()});
+    const zig_process = try ZigProcess.init(gpa, cwd, global.zig_executable, &env_map, main_log);
+    defer gpa.free(zig_process.version.raw_string);
 
     var generator_setup: setup.Generator = try .makeOpen(cwd, env_map, gpa, main_log);
     defer generator_setup.deinit(gpa);
@@ -370,7 +330,6 @@ pub fn main() !void {
         main_log,
         zig_build_additional_args,
         project_setup,
-        zig_slot,
         zig_process,
         arena,
     );
@@ -382,7 +341,10 @@ pub fn main() !void {
             break :year time.year;
         },
         .zbs = .{
-            .slot = zig_slot.render(),
+            .slot = switch (zig_process.version.kind) {
+                .live => "9999",
+                .release => try std.fmt.allocPrint(arena, "{d}.{d}", .{ zig_process.version.sem_ver.major, zig_process.version.sem_ver.minor }),
+            },
             .has_dependencies = @max(dependencies.tarball.len, dependencies.git_commit.len) > 0,
             .has_system_dependencies = @max(report.system_integrations.len, report.system_libraries.len) > 0,
             .has_user_options = report.user_options.len > 0,
@@ -402,28 +364,3 @@ pub fn main() !void {
         main_log.warn(@src(), "Note: it appears your project has Git commit dependencies that generator was unable to convert, please host \"{s}\" somewhere and add it to SRC_URI.", .{tarball_tarball_path});
     }
 }
-
-pub const ZigSlot = union(enum) {
-    live,
-    release: []const u8,
-
-    pub fn render(self: ZigSlot) []const u8 {
-        return switch (self) {
-            .live => "9999",
-            .release => |release| release,
-        };
-    }
-
-    pub fn init(zig_version: std.SemanticVersion, allocator: std.mem.Allocator) error{OutOfMemory}!ZigSlot {
-        return if (zig_version.pre == null) .{
-            .release = try std.fmt.allocPrint(allocator, "{d}.{d}", .{ zig_version.major, zig_version.minor }),
-        } else .live;
-    }
-
-    pub fn deinit(self: ZigSlot, allocator: std.mem.Allocator) void {
-        switch (self) {
-            .live => {},
-            .release => |release| allocator.free(release),
-        }
-    }
-};

@@ -6,7 +6,6 @@ const std = @import("std");
 
 const Logger = @import("../Logger.zig");
 const ZigProcess = @import("../ZigProcess.zig");
-const ZigSlot = @import("../main.zig").ZigSlot;
 
 const setup = @import("../setup.zig");
 
@@ -28,6 +27,16 @@ const UserOption = struct {
     values: ?[]const []const u8,
 };
 
+fn get_build_runner_name_suffix(zig_version: ZigProcess.Version) error{BuildRunnerNotFound}![]const u8 {
+    return switch (zig_version.kind) {
+        .live => "live",
+        .release => if (zig_version.sem_ver.major == 0 and zig_version.sem_ver.minor == 13)
+            "0.13"
+        else
+            return error.BuildRunnerNotFound,
+    };
+}
+
 pub fn collect(
     gpa: std.mem.Allocator,
     env_map: *std.process.EnvMap,
@@ -35,24 +44,26 @@ pub fn collect(
     main_log: Logger,
     zig_build_additional_args: [][:0]const u8,
     project_setup: setup.Project,
-    zig_slot: ZigSlot,
     zig_process: ZigProcess,
     /// Used to store result.
     arena: std.mem.Allocator,
 ) !Report {
-    const build_runner_map: std.StaticStringMap([:0]const u8) = .initComptime(.{
-        .{ "0.13", @embedFile("build_runner_0.13.zig") },
-        .{ "9999", @embedFile("build_runner_9999.zig") },
-    });
-    const build_runner_text = build_runner_map.get(zig_slot.render()) orelse {
-        main_log.err(@src(), "No build runner found for Zig {s}, please report to zig-ebuilder upstream.", .{zig_slot.render()});
-        main_log.err(@src(), "Expected to find: {s}, but only these are available: {s}.", .{ zig_slot.render(), build_runner_map.keys() });
+    const build_runner_name_suffix = get_build_runner_name_suffix(zig_process.version) catch {
+        main_log.err(@src(), "No build runner found for Zig {}, please report to zig-ebuilder upstream.", .{zig_process.version.sem_ver});
+        main_log.err(@src(), "Available build runners: {s}.", .{[2][]const u8{ "live", "0.13" }});
         return error.BuildRunnerNotFound;
     };
 
+    const build_runner_text = if (std.mem.eql(u8, build_runner_name_suffix, "live"))
+        @embedFile("build_runner_live.zig")
+    else if (std.mem.eql(u8, build_runner_name_suffix, "0.13"))
+        @embedFile("build_runner_0.13.zig")
+    else
+        @panic("unreachable");
+
     const hashed_name = hashed_name: {
         const hash_suffix = std.Build.Cache.HashHelper.oneShot(build_runner_text);
-        break :hashed_name try std.fmt.allocPrint(gpa, "build_runner_{s}_{s}.zig", .{ zig_slot.render(), hash_suffix });
+        break :hashed_name try std.fmt.allocPrint(gpa, "{s}_{s}.zig", .{ get_build_runner_name_suffix(zig_process.version) catch @panic("unreachable"), hash_suffix });
     };
     defer gpa.free(hashed_name);
 
