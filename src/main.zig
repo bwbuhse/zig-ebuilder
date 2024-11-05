@@ -178,31 +178,6 @@ pub fn main() !void {
 
     const cwd: location.Dir = .cwd();
 
-    const template_text = if (optional_custom_template_path) |custom_template_path|
-        cwd.dir.readFileAlloc(gpa, custom_template_path, 1 * 1024 * 1024) catch |err| {
-            file_searching_events.err(@src(), "Error when searching custom template: {s} caused by \"{s}\".", .{ @errorName(err), custom_template_path });
-
-            return error.InvalidTemplate;
-        }
-    else
-        // TODO maybe move to /usr/share/stuff/templates/default ?
-        try gpa.dupe(u8, @embedFile("template.ebuild.mustache"));
-    defer gpa.free(template_text);
-
-    const template = switch (try mustache.parseText(gpa, template_text, .{}, .{ .copy_strings = false })) {
-        .parse_error => |detail| {
-            file_searching_events.err(@src(), "Error when loading file: {s} caused by \"{s}\" at {d}:{d}.", .{
-                @errorName(detail.parse_error),
-                if (optional_custom_template_path) |custom_template_path| custom_template_path else "(default template)",
-                detail.lin,
-                detail.col,
-            });
-            return error.InvalidTemplate;
-        },
-        .success => |template| template,
-    };
-    defer template.deinit(gpa);
-
     const initial_file_path: []const u8 = if (file_name) |path| blk: {
         const stat = cwd.dir.statFile(path) catch |err| {
             switch (err) {
@@ -264,6 +239,34 @@ pub fn main() !void {
 
     var generator_setup: setup.Generator = try .makeOpen(cwd, env_map, gpa, main_log);
     defer generator_setup.deinit(gpa);
+
+    const template_text = if (optional_custom_template_path) |custom_template_path|
+        cwd.dir.readFileAlloc(gpa, custom_template_path, 1 * 1024 * 1024) catch |err| {
+            file_searching_events.err(@src(), "Error when searching custom template: {s} caused by \"{s}\".", .{ @errorName(err), custom_template_path });
+
+            return error.InvalidTemplate;
+        }
+    else
+        generator_setup.templates.dir.readFileAlloc(gpa, "gentoo.ebuild.mustache", 1 * 1024 * 1024) catch |err| {
+            file_searching_events.err(@src(), "Error when searching default \"gentoo\" template: \"{s}\".", .{@errorName(err)});
+
+            return error.InvalidTemplate;
+        };
+    defer gpa.free(template_text);
+
+    const template = switch (try mustache.parseText(gpa, template_text, .{}, .{ .copy_strings = false })) {
+        .parse_error => |detail| {
+            file_searching_events.err(@src(), "Error when loading file: {s} caused by \"{s}\" at {d}:{d}.", .{
+                @errorName(detail.parse_error),
+                if (optional_custom_template_path) |custom_template_path| custom_template_path else "(default template)",
+                detail.lin,
+                detail.col,
+            });
+            return error.InvalidTemplate;
+        },
+        .success => |template| template,
+    };
+    defer template.deinit(gpa);
 
     const dependencies: Dependencies = if (global.fetch_mode != .skip) fetch: {
         const build_zig_zon_loc = if (project_setup.build_zig_zon) |build_zig_zon| build_zig_zon else {

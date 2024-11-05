@@ -24,8 +24,11 @@ pub const Generator = struct {
     share: location.Dir,
     /// Absolute, sub-dir of `share`.
     build_runners: location.Dir,
+    /// Absolute, sub-dir of `share`.
+    templates: location.Dir,
 
     pub fn deinit(self: *setup.Generator, allocator: std.mem.Allocator) void {
+        self.templates.deinit(allocator);
         self.build_runners.deinit(allocator);
         self.share.deinit(allocator);
         self.prefix.deinit(allocator);
@@ -89,6 +92,7 @@ pub const Generator = struct {
             .prefix = std.fs.path.dirname(self_exe_dir_path) orelse ".",
             .share = "share/zig-ebuilder",
             .build_runners = "build_runners",
+            .templates = "templates",
         };
         events.debug(@src(), "paths = {}", .{std.json.fmt(paths, .{ .whitespace = .indent_2 })});
 
@@ -130,6 +134,12 @@ pub const Generator = struct {
         };
         errdefer build_runners.deinit(allocator);
 
+        var templates = share.openDir(allocator, paths.templates) catch |err| {
+            events.err(@src(), "Error when opening templates directory \"{s}{c}{s}\": {s}. Aborting.", .{ paths.prefix, std.fs.path.sep, paths.templates, @errorName(err) });
+            return err;
+        };
+        errdefer templates.deinit(allocator);
+
         return .{
             .cache = cache,
             .dependencies_storage = dependencies_storage,
@@ -138,6 +148,7 @@ pub const Generator = struct {
             .prefix = prefix,
             .share = share,
             .build_runners = build_runners,
+            .templates = templates,
         };
     }
 };
