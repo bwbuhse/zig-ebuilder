@@ -5,27 +5,12 @@
 const std = @import("std");
 
 const Logger = @import("Logger.zig");
+const Report = @import("Report");
 const ZigProcess = @import("ZigProcess.zig");
 
 const setup = @import("setup.zig");
 
-const Report = @This();
-
-system_libraries: []const SystemLibrary,
-system_integrations: []const []const u8,
-user_options: []const UserOption,
-
-const SystemLibrary = struct {
-    name: []const u8,
-    used_by: []const []const u8,
-};
-
-const UserOption = struct {
-    name: []const u8,
-    description: []const u8,
-    type: []const u8,
-    values: ?[]const []const u8,
-};
+const reporter = @This();
 
 fn get_build_runner_name(
     allocator: std.mem.Allocator,

@@ -564,22 +564,7 @@ fn prepare(
     // Just to make diff'ing easier.
     // Synced with Zig build runner, version 0.14.0-dev.2052+6a364b4a5 .
     if (true) return zig_ebuilder_section: {
-        const Report = struct {
-            system_libraries: []const SystemLibrary,
-            system_integrations: []const []const u8,
-            user_options: []const UserOption,
-
-            const SystemLibrary = struct {
-                name: []const u8,
-                used_by: []const []const u8,
-            };
-            const UserOption = struct {
-                name: []const u8,
-                description: []const u8,
-                type: []const u8,
-                values: ?[]const []const u8,
-            };
-        };
+        const Report = @import("Report.zig");
 
         var system_libraries: std.StringArrayHashMapUnmanaged([][]const u8) = .empty;
         system_libraries.ensureUnusedCapacity(gpa, step_stack.count() + b.modules.count()) catch @panic("OOM");

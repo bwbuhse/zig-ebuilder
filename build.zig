@@ -13,6 +13,12 @@ pub fn build(b: *std.Build) void {
     const dep_mustache = b.dependency("mustache", .{ .target = target, .optimize = optimize });
     const mod_mustache = dep_mustache.module("mustache");
 
+    const mod_Report = b.addModule("Report", .{
+        .root_source_file = b.path("share/build_runners/Report.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const exe = b.addExecutable(.{
         .name = "zig-ebuilder",
         .root_source_file = b.path("src/main.zig"),
@@ -20,6 +26,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     exe.root_module.addImport("mustache", mod_mustache);
+    exe.root_module.addImport("Report", mod_Report);
 
     b.installDirectory(std.Build.Step.InstallDir.Options{
         .install_dir = .{ .custom = "share" },

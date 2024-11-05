@@ -8,11 +8,12 @@ const mustache = @import("mustache");
 const BuildZigZon = @import("BuildZigZon.zig");
 const Dependencies = @import("Dependencies.zig");
 const Logger = @import("Logger.zig");
-const Report = @import("Report.zig");
+const Report = @import("Report");
 const Timestamp = @import("Timestamp.zig");
 const ZigProcess = @import("ZigProcess.zig");
 
 const location = @import("location.zig");
+const reporter = @import("reporter.zig");
 const setup = @import("setup.zig");
 
 const version: std.SemanticVersion = .{ .major = 0, .minor = 0, .patch = 1 };
@@ -322,7 +323,7 @@ pub fn main() !void {
     const arena = arena_instance.allocator();
 
     main_log.info(@src(), "Running \"zig build\" with custom build runner. Arguments are in DEBUG.", .{});
-    const report: Report = try .collect(
+    const report: Report = try reporter.collect(
         gpa,
         //
         &env_map,
