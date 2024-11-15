@@ -271,10 +271,33 @@ pub fn collect(
                                         std.json.fmt(new, .{ .whitespace = .indent_2 }),
                                     });
                                     break :resolve_conflict new;
-                                } else std.debug.panic("TODO (please report to upstream of zig-ebuilder): resolve conflict: existing: {any}, new: {any}", .{
-                                    std.json.fmt(old, .{ .whitespace = .indent_2 }),
-                                    std.json.fmt(new, .{ .whitespace = .indent_2 }),
-                                });
+                                } else {
+                                    service_map: {
+                                        const old_host = try old_uri.host.?.toRawMaybeAlloc(arena);
+                                        const new_host = try new_uri.host.?.toRawMaybeAlloc(arena);
+                                        const old_service = Service.fromHost.get(old_host) orelse break :service_map;
+                                        const new_service = Service.fromHost.get(new_host) orelse break :service_map;
+
+                                        if (old_service == .github and new_service == .mach) {
+                                            file_events.warn(@src(), "Found 2 package variants with different services: GitHub and Hexops mirror. Changing to Hexops mirror. GitHub variant: {any}, Hexops variant: {any}", .{
+                                                std.json.fmt(old, .{ .whitespace = .indent_2 }),
+                                                std.json.fmt(new, .{ .whitespace = .indent_2 }),
+                                            });
+                                            break :resolve_conflict new;
+                                        } else if (old_service == .mach and new_service == .github) {
+                                            file_events.warn(@src(), "Found 2 package variants with different services: Hexops mirror and GitHub. Leaving Hexops mirror. Hexops variant: {any}, GitHub variant: {any}", .{
+                                                std.json.fmt(old, .{ .whitespace = .indent_2 }),
+                                                std.json.fmt(new, .{ .whitespace = .indent_2 }),
+                                            });
+                                            break :resolve_conflict old;
+                                        }
+                                    }
+
+                                    std.debug.panic("TODO (please report to upstream of zig-ebuilder): resolve conflict: existing: {any}, new: {any}", .{
+                                        std.json.fmt(old, .{ .whitespace = .indent_2 }),
+                                        std.json.fmt(new, .{ .whitespace = .indent_2 }),
+                                    });
+                                }
                             },
                         }
                     };
@@ -319,51 +342,12 @@ pub fn collect(
         // Print everything 'raw' so that Mustache template
         // can percent-encode it by itself.
         const ext: FileType = if (std.ascii.eqlIgnoreCase(uri.scheme, "git+https") or std.ascii.eqlIgnoreCase(uri.scheme, "git+http")) git: {
-            // Services for which mapping "Git commit to archive"
-            // is well known and relatively stable.
-            const GitService = enum {
-                /// Codeberg.
-                codeberg,
-                /// GitHub main instance (not Enterprise).
-                github,
-                /// GitLab official instance.
-                gitlab,
-                /// SourceHut Git instance.
-                sourcehut,
-
-                /// Base URL, without trailing slash,
-                /// stripped of "www." etc. prefix if possible,
-                /// and prefers "https" over "http" if possible.
-                fn toUrl(self: @This()) []const u8 {
-                    return switch (self) {
-                        .codeberg => "https://codeberg.org",
-                        .github => "https://github.com",
-                        .gitlab => "https://gitlab.com",
-                        .sourcehut => "https://git.sr.ht",
-                    };
-                }
-
-                const fromHost: std.StaticStringMap(@This()) = .initComptime(.{
-                    .{ "codeberg.org", .codeberg },
-                    .{ "www.codeberg.org", .codeberg },
-
-                    .{ "github.com", .github },
-                    .{ "www.github.com", .github },
-
-                    .{ "gitlab.com", .gitlab },
-                    .{ "www.gitlab.com", .gitlab },
-
-                    // As of 2024 no "www." variant or redirect:
-                    .{ "git.sr.ht", .sourcehut },
-                });
-            };
-
             // Assuming it is a commit. If "zig fetch" was called by author:
             // * with "--save" option: tags are rewritten as commits,
             // * with "--save-exact" option: tags are not rewritten.
             const commit = uri.fragment orelse @panic("TODO: what to do with exact-saved mutable data (like git+https://...#<tag>)? They should really point to immutable data (like what zig fetch --save would do here, using \"?ref=<tag>#commit\") but IDK how to message it to the authors...");
             const host = try uri.host.?.toRawMaybeAlloc(arena);
-            const service = GitService.fromHost.get(host) orelse {
+            const service = Service.fromHost.get(host) orelse {
                 packaging_needed.appendAssumeCapacity(.{
                     .name = try GitCommitDep.toFileName(.{ .name = dep.name, .hash = hash }, gpa),
                     .hash = try gpa.dupe(u8, hash),
@@ -377,6 +361,7 @@ pub fn collect(
                 .codeberg, .github, .sourcehut, .gitlab => if (std.mem.endsWith(u8, repository, ".git")) {
                     repository = repository[0 .. repository.len - ".git".len];
                 },
+                .mach => @panic("unreachable: Hexops do not mirror Git repositories"),
             }
 
             switch (service) {
@@ -389,6 +374,7 @@ pub fn collect(
                     try url_writer.print("{s}{s}/-/archive/{raw}.tar.gz", .{ s.toUrl(), repository, commit });
                     break :git .@"tar.gz";
                 },
+                .mach => @panic("unreachable: Hexops do not mirror Git repositories"),
             }
         }
         // If not a commit, then tarball.
@@ -411,6 +397,51 @@ pub fn collect(
         .git_commit = try packaging_needed.toOwnedSlice(gpa),
     };
 }
+
+/// Known services with relatively stable links to archives or
+/// source code.
+const Service = enum {
+    /// Codeberg.
+    codeberg,
+    /// GitHub main instance (not Enterprise).
+    github,
+    /// GitLab official instance.
+    gitlab,
+    /// Hexops mirror for Zig releases and Mach projects.
+    mach,
+    /// SourceHut Git instance.
+    sourcehut,
+
+    /// Base URL, without trailing slash,
+    /// stripped of "www." etc. prefix if possible,
+    /// and prefers "https" over "http" if possible.
+    fn toUrl(self: Service) []const u8 {
+        return switch (self) {
+            .codeberg => "https://codeberg.org",
+            .github => "https://github.com",
+            .gitlab => "https://gitlab.com",
+            .mach => "https://pkg.machengine.org",
+            .sourcehut => "https://git.sr.ht",
+        };
+    }
+
+    const fromHost: std.StaticStringMap(Service) = .initComptime(.{
+        .{ "codeberg.org", .codeberg },
+        .{ "www.codeberg.org", .codeberg },
+
+        .{ "github.com", .github },
+        .{ "www.github.com", .github },
+
+        .{ "gitlab.com", .gitlab },
+        .{ "www.gitlab.com", .gitlab },
+
+        // As of 2024 no "www." variant or redirect:
+        .{ "pkg.machengine.org", .mach },
+
+        // As of 2024 no "www." variant or redirect:
+        .{ "git.sr.ht", .sourcehut },
+    });
+};
 
 // Copied from Zig compiler sources ("src/package/Fetch.zig"
 // as for upstream commit ea527f7a850f0200681630d8f36131eca31ef48b).
