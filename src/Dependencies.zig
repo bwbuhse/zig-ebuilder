@@ -338,6 +338,7 @@ pub fn collect(
                 .codeberg, .github, .sourcehut, .gitlab => if (std.mem.endsWith(u8, repository, ".git")) {
                     repository = repository[0 .. repository.len - ".git".len];
                 },
+                .mach => @panic("unreachable: Hexops do not mirror Git repositories"),
             }
 
             switch (service) {
@@ -350,6 +351,7 @@ pub fn collect(
                     try url_writer.print("{s}{s}/-/archive/{raw}.tar.gz", .{ s.toUrl(), repository, commit });
                     break :git .@"tar.gz";
                 },
+                .mach => @panic("unreachable: Hexops do not mirror Git repositories"),
             }
         }
         // If not a commit, then tarball.
@@ -382,6 +384,8 @@ const Service = enum {
     github,
     /// GitLab official instance.
     gitlab,
+    /// Hexops mirror for Zig releases and Mach projects.
+    mach,
     /// SourceHut Git instance.
     sourcehut,
 
@@ -393,6 +397,7 @@ const Service = enum {
             .codeberg => "https://codeberg.org",
             .github => "https://github.com",
             .gitlab => "https://gitlab.com",
+            .mach => "https://pkg.machengine.org",
             .sourcehut => "https://git.sr.ht",
         };
     }
@@ -406,6 +411,9 @@ const Service = enum {
 
         .{ "gitlab.com", .gitlab },
         .{ "www.gitlab.com", .gitlab },
+
+        // As of 2024 no "www." variant or redirect:
+        .{ "pkg.machengine.org", .mach },
 
         // As of 2024 no "www." variant or redirect:
         .{ "git.sr.ht", .sourcehut },
