@@ -271,10 +271,33 @@ pub fn collect(
                                         std.json.fmt(new, .{ .whitespace = .indent_2 }),
                                     });
                                     break :resolve_conflict new;
-                                } else std.debug.panic("TODO (please report to upstream of zig-ebuilder): resolve conflict: existing: {any}, new: {any}", .{
-                                    std.json.fmt(old, .{ .whitespace = .indent_2 }),
-                                    std.json.fmt(new, .{ .whitespace = .indent_2 }),
-                                });
+                                } else {
+                                    service_map: {
+                                        const old_host = try old_uri.host.?.toRawMaybeAlloc(arena);
+                                        const new_host = try new_uri.host.?.toRawMaybeAlloc(arena);
+                                        const old_service = Service.fromHost.get(old_host) orelse break :service_map;
+                                        const new_service = Service.fromHost.get(new_host) orelse break :service_map;
+
+                                        if (old_service == .github and new_service == .mach) {
+                                            file_events.warn(@src(), "Found 2 package variants with different services: GitHub and Hexops mirror. Changing to Hexops mirror. GitHub variant: {any}, Hexops variant: {any}", .{
+                                                std.json.fmt(old, .{ .whitespace = .indent_2 }),
+                                                std.json.fmt(new, .{ .whitespace = .indent_2 }),
+                                            });
+                                            break :resolve_conflict new;
+                                        } else if (old_service == .mach and new_service == .github) {
+                                            file_events.warn(@src(), "Found 2 package variants with different services: Hexops mirror and GitHub. Leaving Hexops mirror. Hexops variant: {any}, GitHub variant: {any}", .{
+                                                std.json.fmt(old, .{ .whitespace = .indent_2 }),
+                                                std.json.fmt(new, .{ .whitespace = .indent_2 }),
+                                            });
+                                            break :resolve_conflict old;
+                                        }
+                                    }
+
+                                    std.debug.panic("TODO (please report to upstream of zig-ebuilder): resolve conflict: existing: {any}, new: {any}", .{
+                                        std.json.fmt(old, .{ .whitespace = .indent_2 }),
+                                        std.json.fmt(new, .{ .whitespace = .indent_2 }),
+                                    });
+                                }
                             },
                         }
                     };
