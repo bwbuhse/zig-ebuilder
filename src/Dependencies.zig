@@ -319,51 +319,12 @@ pub fn collect(
         // Print everything 'raw' so that Mustache template
         // can percent-encode it by itself.
         const ext: FileType = if (std.ascii.eqlIgnoreCase(uri.scheme, "git+https") or std.ascii.eqlIgnoreCase(uri.scheme, "git+http")) git: {
-            // Services for which mapping "Git commit to archive"
-            // is well known and relatively stable.
-            const GitService = enum {
-                /// Codeberg.
-                codeberg,
-                /// GitHub main instance (not Enterprise).
-                github,
-                /// GitLab official instance.
-                gitlab,
-                /// SourceHut Git instance.
-                sourcehut,
-
-                /// Base URL, without trailing slash,
-                /// stripped of "www." etc. prefix if possible,
-                /// and prefers "https" over "http" if possible.
-                fn toUrl(self: @This()) []const u8 {
-                    return switch (self) {
-                        .codeberg => "https://codeberg.org",
-                        .github => "https://github.com",
-                        .gitlab => "https://gitlab.com",
-                        .sourcehut => "https://git.sr.ht",
-                    };
-                }
-
-                const fromHost: std.StaticStringMap(@This()) = .initComptime(.{
-                    .{ "codeberg.org", .codeberg },
-                    .{ "www.codeberg.org", .codeberg },
-
-                    .{ "github.com", .github },
-                    .{ "www.github.com", .github },
-
-                    .{ "gitlab.com", .gitlab },
-                    .{ "www.gitlab.com", .gitlab },
-
-                    // As of 2024 no "www." variant or redirect:
-                    .{ "git.sr.ht", .sourcehut },
-                });
-            };
-
             // Assuming it is a commit. If "zig fetch" was called by author:
             // * with "--save" option: tags are rewritten as commits,
             // * with "--save-exact" option: tags are not rewritten.
             const commit = uri.fragment orelse @panic("TODO: what to do with exact-saved mutable data (like git+https://...#<tag>)? They should really point to immutable data (like what zig fetch --save would do here, using \"?ref=<tag>#commit\") but IDK how to message it to the authors...");
             const host = try uri.host.?.toRawMaybeAlloc(arena);
-            const service = GitService.fromHost.get(host) orelse {
+            const service = Service.fromHost.get(host) orelse {
                 packaging_needed.appendAssumeCapacity(.{
                     .name = try GitCommitDep.toFileName(.{ .name = dep.name, .hash = hash }, gpa),
                     .hash = try gpa.dupe(u8, hash),
@@ -411,6 +372,45 @@ pub fn collect(
         .git_commit = try packaging_needed.toOwnedSlice(gpa),
     };
 }
+
+/// Known services with relatively stable links to archives or
+/// source code.
+const Service = enum {
+    /// Codeberg.
+    codeberg,
+    /// GitHub main instance (not Enterprise).
+    github,
+    /// GitLab official instance.
+    gitlab,
+    /// SourceHut Git instance.
+    sourcehut,
+
+    /// Base URL, without trailing slash,
+    /// stripped of "www." etc. prefix if possible,
+    /// and prefers "https" over "http" if possible.
+    fn toUrl(self: Service) []const u8 {
+        return switch (self) {
+            .codeberg => "https://codeberg.org",
+            .github => "https://github.com",
+            .gitlab => "https://gitlab.com",
+            .sourcehut => "https://git.sr.ht",
+        };
+    }
+
+    const fromHost: std.StaticStringMap(Service) = .initComptime(.{
+        .{ "codeberg.org", .codeberg },
+        .{ "www.codeberg.org", .codeberg },
+
+        .{ "github.com", .github },
+        .{ "www.github.com", .github },
+
+        .{ "gitlab.com", .gitlab },
+        .{ "www.gitlab.com", .gitlab },
+
+        // As of 2024 no "www." variant or redirect:
+        .{ "git.sr.ht", .sourcehut },
+    });
+};
 
 // Copied from Zig compiler sources ("src/package/Fetch.zig"
 // as for upstream commit ea527f7a850f0200681630d8f36131eca31ef48b).
