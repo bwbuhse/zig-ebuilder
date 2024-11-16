@@ -1,0 +1,33 @@
+# SPDX-FileCopyrightText: 2024 Eric Joldasov
+# SPDX-License-Identifier: CC0-1.0
+
+name: Zig
+on:
+  push:
+    branches: [ $default-branch ]
+    paths-ignore:
+      - "LICENSE/**"
+      - "README.md"
+      - ".gitignore"
+  pull_request:
+    branches: [ $default-branch ]
+    paths-ignore:
+      - "LICENSE/**"
+      - "README.md"
+      - ".gitignore"
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-24.04, windows-2022, macos-15]
+    name: Build for ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout last commit
+        uses: actions/checkout@v4
+      - name: Setup Zig nightly
+        uses: mlugg/setup-zig@v1
+        with:
+          version: master
+      - run: zig build
