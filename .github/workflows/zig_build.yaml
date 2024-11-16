@@ -4,13 +4,13 @@
 name: Zig
 on:
   push:
-    branches: [ $default-branch ]
+    branches: [ main ]
     paths-ignore:
       - "LICENSE/**"
       - "README.md"
       - ".gitignore"
   pull_request:
-    branches: [ $default-branch ]
+    branches: [ main ]
     paths-ignore:
       - "LICENSE/**"
       - "README.md"
