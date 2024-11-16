@@ -80,7 +80,7 @@ fn log(
 
                 var screen_info: std.os.windows.CONSOLE_SCREEN_BUFFER_INFO = undefined;
                 if (std.os.windows.kernel32.GetConsoleScreenBufferInfo(stderr.handle, &screen_info) == std.os.windows.FALSE) break :windows;
-                return .{ .windows_api = .{
+                break :config .{ .windows_api = .{
                     .handle = stderr.handle,
                     .reset_attributes = screen_info.wAttributes,
                 } };
