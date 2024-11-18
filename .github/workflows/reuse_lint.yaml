@@ -3,8 +3,9 @@
 
 name: REUSE
 on:
+  merge_group:
   push:
-    branches: [ main ]
+    branches: "**"
   pull_request:
     branches: [ main ]
 jobs:
