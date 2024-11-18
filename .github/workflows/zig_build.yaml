@@ -3,8 +3,9 @@
 
 name: Zig
 on:
+  merge_group:
   push:
-    branches: [ main ]
+    branches: "**"
     paths-ignore:
       - "LICENSE/**"
       - "README.md"
