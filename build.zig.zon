@@ -19,6 +19,6 @@
         "LICENSES/EUPL-1.2.txt",
         "LICENSES/MIT.txt",
         // "LICENSES/CC0-1.0.txt" not added here because all files
-        // under this license are not included here (only CI).
+        // under this license are not included here (README and CI).
     },
 }
