@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2024 BratishkaErik
 //
-// SPDX-License-Identifier: CC0-1.0
+// SPDX-License-Identifier: 0BSD
 
 const std = @import("std");
 
