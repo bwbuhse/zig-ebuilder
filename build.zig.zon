@@ -15,6 +15,10 @@
         "build.zig",
         "build.zig.zon",
         "src/",
-        "LICENSES/",
+        "LICENSES/0BSD.txt",
+        "LICENSES/EUPL-1.2.txt",
+        "LICENSES/MIT.txt",
+        // "LICENSES/CC0-1.0.txt" not added here because all files
+        // under this license are not included here (only CI).
     },
 }

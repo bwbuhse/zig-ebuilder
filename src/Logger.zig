@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2024 BratishkaErik
 //
-// SPDX-License-Identifier: MPL-2.0
+// SPDX-License-Identifier: EUPL-1.2
 
 const std = @import("std");
 
