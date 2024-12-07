@@ -80,7 +80,7 @@ declare -r -A ZBS_DEPENDENCIES=(
 )
 
 ZIG_SLOT="0.13"
-inherit zig-build
+inherit zig
 
 DESCRIPTION="Write manually"
 HOMEPAGE="Write manually"
@@ -107,7 +107,7 @@ src_configure() {
 		# -Dwith_tui=[bool] 
 	)
 
-	zig-build_src_configure
+	zig_src_configure
 }
 ```
 

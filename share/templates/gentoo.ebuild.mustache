@@ -31,7 +31,7 @@ declare -r -A ZBS_DEPENDENCIES=(
 
 {{/zbs.has_dependencies}}
 ZIG_SLOT="{{zbs.slot}}"
-inherit zig-build
+inherit zig
 
 DESCRIPTION="Write manually"
 HOMEPAGE="Write manually"
@@ -51,7 +51,7 @@ SLOT="0"
 KEYWORDS="~amd64"
 
 {{#zbs.has_system_dependencies}}
-# Set dependencies by yourself, but keep in mind that zig-build.eclass already
+# Set dependencies by yourself, but keep in mind that zig.eclass already
 # adds Zig and pkg-config to BDEPEND, so you don't need to mention them here.
 # Detected system integrations:
 {{#zbs.report.system_integrations}}
@@ -79,5 +79,5 @@ src_configure() {
 {{/zbs.has_user_options}}
 	)
 
-	zig-build_src_configure
+	zig_src_configure
 }
