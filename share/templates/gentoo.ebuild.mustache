@@ -14,12 +14,15 @@ for ::gentoo and ::guru repos, you can relicense this output however you want.
 
 EAPI=8
 
+DESCRIPTION="Write manually"
+HOMEPAGE="Write manually"
+
 {{#zbs.has_dependencies}}
-declare -r -A ZBS_DEPENDENCIES=(
+declare -g -r -A ZBS_DEPENDENCIES=(
 {{#zbs.dependencies.tarball}}
 	[{{{name}}}]='{{url}}'
 {{/zbs.dependencies.tarball}}
-{{#zbs.tarball_tarball}} 
+{{#zbs.tarball_tarball}}
 	# Untranslatable Git dependencies were found. Host
 	# following tarball-tarball somewhere and add it to SRC_URI:
 	# {{.}}
@@ -32,9 +35,6 @@ declare -r -A ZBS_DEPENDENCIES=(
 {{/zbs.has_dependencies}}
 ZIG_SLOT="{{zbs.slot}}"
 inherit zig
-
-DESCRIPTION="Write manually"
-HOMEPAGE="Write manually"
 
 SRC_URI="
 	[Write manually main download URL of your package here]
@@ -59,7 +59,7 @@ KEYWORDS="~amd64"
 {{/zbs.report.system_integrations}}
 # Detected system libraries:
 {{#zbs.report.system_libraries}}
-#	{{name}}, used by: {{#used_by}}{{.}}, {{/used_by}}
+#	{{name}}, used by: {{#used_by}}{{.}},{{/used_by}}
 {{/zbs.report.system_libraries}}
 
 {{/zbs.has_system_dependencies}}
@@ -68,13 +68,13 @@ src_configure() {
 {{#zbs.has_user_options}}
 		# Here you have list of options that are exposed by build.zig,
 		# pass USE flags and default values here.
-		
+
 {{#zbs.report.user_options}}
 		# {{name}}: {{description}}
 {{/zbs.report.user_options}}
-		
+
 {{#zbs.report.user_options}}
-		# -D{{name}}=[{{type}}] {{#values}}{{.}}, {{/values}}
+		# -D{{name}}=[{{type}}] {{#values}}{{.}},{{/values}}
 {{/zbs.report.user_options}}
 {{/zbs.has_user_options}}
 	)
