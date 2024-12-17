@@ -59,7 +59,7 @@ KEYWORDS="~amd64"
 {{/zbs.report.system_integrations}}
 # Detected system libraries:
 {{#zbs.report.system_libraries}}
-#	{{name}}, used by: {{#used_by}}{{.}},{{/used_by}}
+#	{{name}}, used by:{{#used_by}} {{.}},{{/used_by}}
 {{/zbs.report.system_libraries}}
 {{{zbs.iuse_string}}}
 
@@ -75,7 +75,7 @@ src_configure() {
 {{/zbs.report.user_options}}
 
 {{#zbs.report.user_options}}
-		# -D{{name}}=[{{type}}] {{#values}}{{.}},{{/values}}
+		# -D{{name}}=[{{type}}]{{#values}} {{.}},{{/values}}
 {{/zbs.report.user_options}}
 {{/zbs.has_user_options}}
 {{#zbs.has_system_integrations}}
