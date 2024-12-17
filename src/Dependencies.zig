@@ -218,7 +218,10 @@ pub fn collect(
                 };
                 defer package_build_zig_zon_loc.deinit(arena);
 
-                break :zon try .read(arena, package_build_zig_zon_loc, file_events);
+                const next_file_events = try file_events.child(item.name);
+                defer next_file_events.deinit();
+
+                break :zon try .read(arena, package_build_zig_zon_loc, next_file_events);
             };
             if (next_build_zig_zon_struct.name.len == 0)
                 next_build_zig_zon_struct.name = item.name;
