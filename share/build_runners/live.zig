@@ -576,14 +576,14 @@ fn prepare(
             for (link_objects) |obj| switch (obj) {
                 .system_lib => |lib| {
                     const gop = system_libraries.getOrPutAssumeCapacity(lib.name);
-                    const new_name = b.fmt("(artifact) {s}", .{artifact.name});
+                    const new_name: []u8 = b.fmt("(artifact) {s}", .{artifact.name});
                     if (gop.found_existing == false) {
-                        gop.value_ptr.* = b.dupeStrings(&.{new_name});
+                        gop.value_ptr.* = @ptrCast(b.dupeStrings(&.{new_name}));
                     } else {
                         const old = gop.value_ptr.*;
                         var names: std.ArrayListUnmanaged([]const u8) = .fromOwnedSlice(old);
                         names.append(gpa, new_name) catch @panic("OOM");
-                        gop.value_ptr.* = names.toOwnedSlice(gpa) catch @panic("OOM");
+                        gop.value_ptr.* = @ptrCast(names.toOwnedSlice(gpa) catch @panic("OOM"));
                     }
                 },
 
@@ -604,12 +604,12 @@ fn prepare(
                     const gop = system_libraries.getOrPutAssumeCapacity(lib.name);
                     const new_name = b.fmt("(module) {s}", .{module_name});
                     if (gop.found_existing == false) {
-                        gop.value_ptr.* = b.dupeStrings(&.{new_name});
+                        gop.value_ptr.* = @ptrCast(b.dupeStrings(&.{new_name}));
                     } else {
                         const old = gop.value_ptr.*;
                         var names: std.ArrayListUnmanaged([]const u8) = .fromOwnedSlice(old);
                         names.append(gpa, new_name) catch @panic("OOM");
-                        gop.value_ptr.* = names.toOwnedSlice(gpa) catch @panic("OOM");
+                        gop.value_ptr.* = @ptrCast(names.toOwnedSlice(gpa) catch @panic("OOM"));
                     }
                 },
 
@@ -655,7 +655,7 @@ fn prepare(
         }.lessThan);
 
         const system_integrations = b.dupeStrings(b.graph.system_library_options.keys());
-        std.mem.sort([]const u8, system_integrations, {}, struct {
+        std.mem.sort([]const u8, @ptrCast(system_integrations), {}, struct {
             pub fn lessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
                 return std.mem.order(u8, lhs, rhs) == .lt;
             }
@@ -1487,20 +1487,20 @@ fn usage(b: *std.Build, out_stream: anytype) !void {
     );
 }
 
-fn nextArg(args: [][:0]const u8, idx: *usize) ?[:0]const u8 {
+fn nextArg(args: []const [:0]const u8, idx: *usize) ?[:0]const u8 {
     if (idx.* >= args.len) return null;
     defer idx.* += 1;
     return args[idx.*];
 }
 
-fn nextArgOrFatal(args: [][:0]const u8, idx: *usize) [:0]const u8 {
+fn nextArgOrFatal(args: []const [:0]const u8, idx: *usize) [:0]const u8 {
     return nextArg(args, idx) orelse {
         std.debug.print("expected argument after '{s}'\n  access the help menu with 'zig build -h'\n", .{args[idx.* - 1]});
         process.exit(1);
     };
 }
 
-fn argsRest(args: [][:0]const u8, idx: usize) ?[][:0]const u8 {
+fn argsRest(args: []const [:0]const u8, idx: usize) ?[]const [:0]const u8 {
     if (idx >= args.len) return null;
     return args[idx..];
 }
