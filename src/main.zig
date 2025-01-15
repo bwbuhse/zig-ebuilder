@@ -355,19 +355,6 @@ pub fn main() !void {
             .has_user_options = report.user_options.len > 0,
             .dependencies = dependencies,
             .tarball_tarball = optional_tarball_tarball_path,
-            .iuse_string = if (report.system_integrations.len == 0) "" else iuse: {
-                // IUSE="+system-ffmpeg +system-sdl2 ..."
-                var flags: std.ArrayListUnmanaged(u8) = .empty;
-                errdefer flags.deinit(arena);
-                const flags_writer = flags.writer(arena);
-
-                try flags_writer.print("IUSE=\"", .{});
-                for (report.system_integrations[0 .. report.system_integrations.len - 1]) |system_integration|
-                    try flags_writer.print("+system-{s} ", .{system_integration});
-                try flags_writer.print("+system-{s}\"", .{report.system_integrations[report.system_integrations.len - 1]});
-
-                break :iuse try flags.toOwnedSlice(arena);
-            },
             .report = report,
         },
     };

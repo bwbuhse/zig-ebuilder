@@ -61,7 +61,6 @@ KEYWORDS="~amd64"
 {{#zbs.report.system_libraries}}
 #	{{name}}, used by:{{#used_by}} {{.}},{{/used_by}}
 {{/zbs.report.system_libraries}}
-{{{zbs.iuse_string}}}
 
 {{/zbs.has_system_dependencies}}
 src_configure() {
@@ -81,7 +80,7 @@ src_configure() {
 {{#zbs.has_system_integrations}}
 
 {{#zbs.report.system_integrations}}
-		-f$(usex system-{{{.}}} sys no-sys)={{{.}}}
+		-fsys={{{.}}}
 {{/zbs.report.system_integrations}}
 {{/zbs.has_system_integrations}}
 	)
